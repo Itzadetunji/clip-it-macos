@@ -7,18 +7,19 @@
 
 import SwiftUI
 
-struct ContentView: View {
+struct ClipIt: View {
+    @State var currentTab: NavbarTab = NavbarTab.general
+    
     var body: some View {
         VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+            NavBar(currentTab: $currentTab)
+            Spacer()
         }
         .padding()
+        .frame(width: 450, height: 200)
     }
 }
 
 #Preview {
-    ContentView()
+    ClipIt()
 }

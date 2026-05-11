@@ -7,13 +7,13 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		C4B843202FB2835000502072 /* clip it mac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "clip it mac.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C4B843202FB2835000502072 /* ClipIt.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClipIt.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		C4B843222FB2835000502072 /* clip it mac */ = {
+		C4B843222FB2835000502072 /* ClipIt */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "clip it mac";
+			path = ClipIt;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,7 +32,7 @@
 		C4B843172FB2835000502072 = {
 			isa = PBXGroup;
 			children = (
-				C4B843222FB2835000502072 /* clip it mac */,
+				C4B843222FB2835000502072 /* ClipIt */,
 				C4B843212FB2835000502072 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -40,7 +40,7 @@
 		C4B843212FB2835000502072 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				C4B843202FB2835000502072 /* clip it mac.app */,
+				C4B843202FB2835000502072 /* ClipIt.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		C4B8431F2FB2835000502072 /* clip it mac */ = {
+		C4B8431F2FB2835000502072 /* ClipIt */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = C4B8432B2FB2835100502072 /* Build configuration list for PBXNativeTarget "clip it mac" */;
+			buildConfigurationList = C4B8432B2FB2835100502072 /* Build configuration list for PBXNativeTarget "ClipIt" */;
 			buildPhases = (
 				C4B8431C2FB2835000502072 /* Sources */,
 				C4B8431D2FB2835000502072 /* Frameworks */,
@@ -61,13 +61,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				C4B843222FB2835000502072 /* clip it mac */,
+				C4B843222FB2835000502072 /* ClipIt */,
 			);
-			name = "clip it mac";
+			name = ClipIt;
 			packageProductDependencies = (
 			);
 			productName = "clip it mac";
-			productReference = C4B843202FB2835000502072 /* clip it mac.app */;
+			productReference = C4B843202FB2835000502072 /* ClipIt.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -85,7 +85,7 @@
 					};
 				};
 			};
-			buildConfigurationList = C4B8431B2FB2835000502072 /* Build configuration list for PBXProject "clip it mac" */;
+			buildConfigurationList = C4B8431B2FB2835000502072 /* Build configuration list for PBXProject "ClipIt" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -99,7 +99,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				C4B8431F2FB2835000502072 /* clip it mac */,
+				C4B8431F2FB2835000502072 /* ClipIt */,
 			);
 		};
 /* End PBXProject section */
@@ -332,7 +332,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C4B8431B2FB2835000502072 /* Build configuration list for PBXProject "clip it mac" */ = {
+		C4B8431B2FB2835000502072 /* Build configuration list for PBXProject "ClipIt" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C4B843292FB2835100502072 /* Debug */,
@@ -341,7 +341,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		C4B8432B2FB2835100502072 /* Build configuration list for PBXNativeTarget "clip it mac" */ = {
+		C4B8432B2FB2835100502072 /* Build configuration list for PBXNativeTarget "ClipIt" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C4B8432C2FB2835100502072 /* Debug */,

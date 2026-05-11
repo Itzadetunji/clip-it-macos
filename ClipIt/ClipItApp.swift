@@ -8,10 +8,10 @@
 import SwiftUI
 
 @main
-struct clip_it_macApp: App {
+struct ClipItApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ClipIt()
         }
     }
 }
