@@ -8,8 +8,27 @@
 import SwiftUI
 
 struct HomeView: View {
+    @State var launchOnLogin: Bool = false
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        preferenceRow(label: "Startup") {
+            Toggle("Launch on Login", isOn: $launchOnLogin)
+                .toggleStyle(.checkbox)
+        }
+    }
+}
+
+private let labelColumnWidth: CGFloat = 120
+private func preferenceRow<Content: View>(
+    label: String,
+    @ViewBuilder content: () -> Content
+) -> some View {
+    HStack {
+        Text(label)
+            .foregroundStyle(.secondary)
+            .frame(width: labelColumnWidth, alignment: .trailing)
+
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

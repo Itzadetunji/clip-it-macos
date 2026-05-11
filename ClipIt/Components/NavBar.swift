@@ -46,7 +46,7 @@ struct NavBarButton: View {
                 currentTab = tab
             }
         } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 Image(systemName: tab.symbolName)
                     .font(
                         Font.system(size: 22)
@@ -64,13 +64,7 @@ struct NavBarButton: View {
         )
         .padding(0)
         .frame(width: 52, height: 52)
-        .background {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.12))
-            }
-        }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
     }
 }
 
