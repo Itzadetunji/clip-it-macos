@@ -13,6 +13,7 @@ struct Settings: Codable, Equatable {
     var Time: Times = Times.fifteen
     var IsCustom = false
     var CustomTime = 60
+    var isRecording = false
 }
 
 

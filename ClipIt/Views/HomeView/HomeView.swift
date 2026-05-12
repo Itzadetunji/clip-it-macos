@@ -13,6 +13,29 @@ struct HomeView: View {
 
     var body: some View {
         VStack(alignment: .center, spacing: 12) {
+            preferenceRow(label: "Record") {
+                HStack {
+                    Toggle(isOn: $viewModel.userSettings.isRecording) {
+                        EmptyView()
+                    }
+                    .toggleStyle(.switch)
+
+                    if viewModel.userSettings.isRecording {
+                        Button {
+                            viewModel.userSettings.isRecording.toggle()
+                        } label: {
+                            Text("Clip It")
+                        }
+                        .buttonStyle(.glass)
+                        .transition(.opacity)
+                    }
+                }
+                .animation(
+                    .easeInOut(duration: 0.15),
+                    value: viewModel.userSettings.isRecording
+                )
+            }
+
             preferenceRow(label: "Startup") {
                 Toggle(
                     "Launch on Login",
@@ -34,7 +57,7 @@ struct HomeView: View {
             //                }
             //            }
 
-            preferenceRow(label: "Time", alignment: .top) {
+            preferenceRow(label: "Time") {
                 HStack(spacing: 16) {
                     Toggle(
                         "15s",
@@ -68,10 +91,13 @@ struct HomeView: View {
                         )
                     )
                     .toggleStyle(.checkbox)
-                }
+                }.animation(
+                    .easeInOut(duration: 0.15),
+                    value: viewModel.userSettings.IsCustom
+                )
             }.disabled(viewModel.userSettings.IsCustom)
 
-            preferenceRow(label: "Custom Time", alignment: .top) {
+            preferenceRow(label: "Custom Time") {
                 HStack(spacing: 16) {
                     Toggle(
                         "Enable",
@@ -100,7 +126,10 @@ struct HomeView: View {
                     ).frame(maxWidth: 50).disabled(
                         !viewModel.userSettings.IsCustom
                     )
-                }
+                }.animation(
+                    .easeInOut(duration: 0.15),
+                    value: viewModel.userSettings.IsCustom
+                )
             }
 
         }
