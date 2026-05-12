@@ -14,7 +14,7 @@ final class HomeViewModel {
 
     var userSettings = Settings()
     var alertItem: AlertItem?
-    var showMicrophoneUnavailablePrompt: Bool = false
+    var microphoneAlert: TwoButtonAlertItem?
 
     func saveChanges() {
         do {
@@ -52,7 +52,18 @@ final class HomeViewModel {
                 userSettings.isRecording = true
             } catch {
                 if case MicrophoneCaptureError.noInputDevice = error {
-                    showMicrophoneUnavailablePrompt = true
+                    microphoneAlert = AlertContext.noMicrophoneDetected(
+                        onContinueWithoutMicrophone: { [weak self] in
+                            guard let self else { return }
+                            self.microphoneAlert = nil
+                            Task {
+                                await self.continueRecordingWithoutMicrophone()
+                            }
+                        },
+                        onCancel: { [weak self] in
+                            self?.microphoneAlert = nil
+                        }
+                    )
                 } else {
                     alertItem = AlertContext.captureError(error)
                 }
@@ -62,6 +73,7 @@ final class HomeViewModel {
                 try await RecordingCoordinator.shared.stopCapture()
                 userSettings.isRecording = false
             } catch {
+                print(error)
                 alertItem = AlertContext.captureError(error)
             }
         }
@@ -69,7 +81,6 @@ final class HomeViewModel {
 
     @MainActor
     func continueRecordingWithoutMicrophone() async {
-        showMicrophoneUnavailablePrompt = false
         do {
             try await RecordingCoordinator.shared.startCapture(
                 includeMicrophone: false
