@@ -19,7 +19,6 @@ final class HomeViewModel {
         do {
             let data = try JSONEncoder().encode(userSettings)
             userData = data
-            alertItem = AlertContext.userSaveSuccess
         } catch {
             alertItem = AlertContext.invalidUserData
         }

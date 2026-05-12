@@ -9,7 +9,6 @@ import SwiftUI
 
 struct ClipIt: View {
     @State var currentTab: NavbarTab = NavbarTab.general
-    @State var homeViewModel: HomeViewModel = HomeViewModel()
 
     var body: some View {
         VStack {
@@ -25,9 +24,6 @@ struct ClipIt: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.easeInOut(duration: 0.15), value: currentTab)
-            .onAppear {
-                homeViewModel.retrieveUser()
-            }
         }
         .padding()
         .frame(width: 450, height: 200)
