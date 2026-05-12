@@ -42,4 +42,13 @@ struct AlertContext {
         ),
         dismissButton: .default(Text("OK"))
     )
+    
+    static func captureError(_ error: Error) -> AlertItem {
+        print(error)
+        return AlertItem(
+            title: Text("Couldn’t Record"),
+            message: Text(error.localizedDescription),
+            dismissButton: .default(Text("OK"))
+        )
+    }
 }

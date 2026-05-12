@@ -2,13 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key></key>
+	<string></string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>ClipIt needs screen and system audio access to record clips.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ClipIt needs the microphone to record your voice with the clip.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.adetunji.ClipIt</string>
+			<string>com.adetunji.clip-it-mac</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>clipit</string>

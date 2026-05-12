@@ -15,14 +15,21 @@ struct HomeView: View {
         VStack(alignment: .center, spacing: 12) {
             preferenceRow(label: "Record") {
                 HStack {
-                    Toggle(isOn: $viewModel.userSettings.isRecording) {
+                    Toggle(
+                        isOn: Binding(
+                            get: { viewModel.userSettings.isRecording },
+                            set: { newValue in
+                                Task { await viewModel.setRecording(newValue) }
+                            }
+                        )
+                    ) {
                         EmptyView()
                     }
                     .toggleStyle(.switch)
 
                     if viewModel.userSettings.isRecording {
                         Button {
-                            viewModel.userSettings.isRecording.toggle()
+                            Task { await viewModel.setRecording(false) }
                         } label: {
                             Text("Clip It")
                         }
