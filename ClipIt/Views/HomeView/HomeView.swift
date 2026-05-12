@@ -21,18 +21,18 @@ struct HomeView: View {
                 .toggleStyle(.checkbox)
             }
 
-            preferenceRow(label: "Status Bar Icon", alignment: .top) {
-                VStack(alignment: .leading) {
-                    Toggle(
-                        "Hide Status Bar Icon",
-                        isOn: $viewModel.userSettings.StatusBarIcon
-                    )
-                    .toggleStyle(.checkbox)
-                    Text("Re-run ClipIt again to show the hidden icon")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            //            preferenceRow(label: "Status Bar Icon", alignment: .top) {
+            //                VStack(alignment: .leading) {
+            //                    Toggle(
+            //                        "Hide Status Bar Icon",
+            //                        isOn: $viewModel.userSettings.StatusBarIcon
+            //                    )
+            //                    .toggleStyle(.checkbox)
+            //                    Text("Re-run ClipIt again to show the hidden icon")
+            //                        .font(.caption)
+            //                        .foregroundStyle(.secondary)
+            //                }
+            //            }
 
             preferenceRow(label: "Time", alignment: .top) {
                 HStack(spacing: 16) {
@@ -97,7 +97,9 @@ struct HomeView: View {
                                     Int(newValue) ?? 0
                             }
                         )
-                    ).frame(maxWidth: 50).disabled(!viewModel.userSettings.IsCustom)
+                    ).frame(maxWidth: 50).disabled(
+                        !viewModel.userSettings.IsCustom
+                    )
                 }
             }
 

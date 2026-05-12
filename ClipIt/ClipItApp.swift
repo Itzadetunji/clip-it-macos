@@ -5,14 +5,18 @@
 //  Created by Adetunji Adeyinka on 11/05/2026.
 //
 
-import SwiftUI
 import AppKit
+import SwiftUI
 
 @main
 struct ClipItApp: App {
+    @NSApplicationDelegateAdaptor(ClipItAppDelegate.self) private
+        var appDelegate
+
     var body: some Scene {
         WindowGroup {
             ClipIt()
+                .background(CloseHidesWindowInstaller())
         }.defaultSize(width: 450, height: 200)
             .windowResizability(.contentSize)
 
@@ -24,7 +28,7 @@ struct ClipItApp: App {
             } label: {
                 Label("Open ClipIt", systemImage: "macwindow")
             }
-            
+
             Button("Save 15s") {
                 // trigger 15s save — wire to your capture logic / settings
             }
@@ -39,7 +43,7 @@ struct ClipItApp: App {
 
             Button {
                 NSApplication.shared.terminate(nil)
-            } label:{
+            } label: {
                 Label("Quit ClipIt", systemImage: "xmark.square")
             }
         }
