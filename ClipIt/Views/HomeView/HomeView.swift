@@ -157,6 +157,20 @@ struct HomeView: View {
             )
         }
 
+        .alert(
+            "No microphone detected",
+            isPresented: $viewModel.showMicrophoneUnavailablePrompt
+        ) {
+            Button("Continue without microphone") {
+                Task { await viewModel.continueRecordingWithoutMicrophone() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "No microphone input is available. You can still record the screen and system audio, or cancel and connect a microphone in System Settings."
+            )
+        }
+
     }
 }
 

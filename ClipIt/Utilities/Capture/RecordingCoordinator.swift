@@ -17,9 +17,16 @@ final class RecordingCoordinator {
     func startCapture(includeMicrophone: Bool = true) async throws {
         guard !isRecording else { return }
         try await screen.start()
-        if includeMicrophone { try microphone.start() }
+        do {
+            if includeMicrophone { try microphone.start() }
+        } catch {
+            // Keep internal state consistent if mic setup fails after screen capture starts.
+            try? await screen.stop()
+            throw error
+        }
         isRecording = true
     }
+    
 
     func stopCapture() async throws {
         guard isRecording else { return }

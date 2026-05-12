@@ -11,9 +11,10 @@ import SwiftUI
 @Observable
 final class HomeViewModel {
     @ObservationIgnored @AppStorage("user") private var userData: Data?
-    
+
     var userSettings = Settings()
     var alertItem: AlertItem?
+    var showMicrophoneUnavailablePrompt: Bool = false
 
     func saveChanges() {
         do {
@@ -30,22 +31,31 @@ final class HomeViewModel {
         }
 
         do {
-            userSettings = try JSONDecoder().decode(Settings.self, from: userData)
+            userSettings = try JSONDecoder().decode(
+                Settings.self,
+                from: userData
+            )
             userSettings.isRecording = RecordingCoordinator.shared.isRecording
         } catch {
             alertItem = AlertContext.invalidUserData
 
         }
     }
-    
+
     @MainActor
     func setRecording(_ enabled: Bool) async {
         if enabled {
             do {
-                try await RecordingCoordinator.shared.startCapture()
+                try await RecordingCoordinator.shared.startCapture(
+                    includeMicrophone: true
+                )
                 userSettings.isRecording = true
             } catch {
-                alertItem = AlertContext.captureError(error)
+                if case MicrophoneCaptureError.noInputDevice = error {
+                    showMicrophoneUnavailablePrompt = true
+                } else {
+                    alertItem = AlertContext.captureError(error)
+                }
             }
         } else {
             do {
@@ -54,6 +64,19 @@ final class HomeViewModel {
             } catch {
                 alertItem = AlertContext.captureError(error)
             }
+        }
+    }
+
+    @MainActor
+    func continueRecordingWithoutMicrophone() async {
+        showMicrophoneUnavailablePrompt = false
+        do {
+            try await RecordingCoordinator.shared.startCapture(
+                includeMicrophone: false
+            )
+            userSettings.isRecording = true
+        } catch {
+            alertItem = AlertContext.captureError(error)
         }
     }
 }
