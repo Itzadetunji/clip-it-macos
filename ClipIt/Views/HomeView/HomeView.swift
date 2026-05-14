@@ -145,14 +145,17 @@ struct HomeView: View {
                     Button {
                         viewModel.selectExportFolder()
                     } label: {
-                        Label("Save Location", systemImage: "arrow.up.folder")
+                        Label("Location", systemImage: "arrow.up.folder")
                     }.buttonStyle(.plain)
                         .padding(.vertical, 4)
                         .padding(.horizontal, 6)
                         .background(.tertiary)
                         .cornerRadius(6)
 
-                    Text("\(viewModel.userSettings.saveLocation.relativePath)")
+                    Text(viewModel.userSettings.saveLocation.relativePath)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .help(viewModel.userSettings.saveLocation.relativePath)
                 }
 
             }
