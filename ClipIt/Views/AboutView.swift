@@ -8,8 +8,65 @@
 import SwiftUI
 
 struct AboutView: View {
+    let year = Date.now.formatted(.dateTime.year())
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        VStack(spacing: 10) {
+            HStack {
+                Text("Clip It")
+                    .font(SofiaFont.light(size: 64))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("© \(year) ClipIt. All rights reserved.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                    Text("Saving The Best Moments").font(
+                        SofiaFont.light(size: 12)
+                    )
+                }
+                Spacer()
+            }
+            HStack {
+                Link(
+                    destination: URL(string: "https://get-clip-it.vercel.app/")!
+                ) {
+                    Text("Home Page")
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity)
+                .background(.tertiary)
+                .cornerRadius(6)
+                .font(.callout)
+
+                Link(
+                    destination: URL(
+                        string: "https://github.com/itzadetunji/clip-it-macos"
+                    )!
+                ) {
+                    Text("Github")
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity)
+                .background(.tertiary)
+                .cornerRadius(6)
+                .font(.callout)
+
+                Link(destination: URL(string: "https://github.com/itzadetunji/clip-it-macos/graphs/contributors")!) {
+                    Text("Contributors")
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity)
+                .background(.tertiary)
+                .cornerRadius(6)
+                .font(.callout)
+            }
+
+        }
+
     }
 }
 

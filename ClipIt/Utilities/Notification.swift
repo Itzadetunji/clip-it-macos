@@ -6,7 +6,7 @@
 //
 import UserNotifications
 
-func scheduleNotification(title: String, body: String) {
+func scheduleNotification(title: String, body: String, timeInterval: TimeInterval = 1) {
 
     let content = UNMutableNotificationContent()
     content.title = title
@@ -14,7 +14,7 @@ func scheduleNotification(title: String, body: String) {
     content.sound = .default
 
     let trigger = UNTimeIntervalNotificationTrigger(
-        timeInterval: 1,
+        timeInterval: timeInterval,
         repeats: false
     )
 
