@@ -27,14 +27,12 @@ enum RollingSegmentsDirectory {
 
     static func newRollingSegmentURL() throws -> URL {
         let dir = try rollingSegmentsURL()
-        let stamp = String(format: "%.3f", Date().timeIntervalSince1970)
-        return dir.appendingPathComponent("Segment-\(stamp).mp4")
+        return uniqueFileURL(in: dir, prefix: "Segment")
     }
 
     static func newExportedClipURL() throws -> URL {
         let dir = try savedClipsURL()
-        let stamp = String(format: "%.3f", Date().timeIntervalSince1970)
-        return dir.appendingPathComponent("Clip-\(stamp).mp4")
+        return uniqueFileURL(in: dir, prefix: "Clip")
     }
 
     static func removeAllRollingSegmentFiles() {
@@ -42,6 +40,17 @@ enum RollingSegmentsDirectory {
         guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
         for file in files {
             try? FileManager.default.removeItem(at: file)
+        }
+    }
+
+    private static func uniqueFileURL(in directory: URL, prefix: String) -> URL {
+        while true {
+            let timestampMicroseconds = UInt64((Date().timeIntervalSince1970 * 1_000_000).rounded())
+            let fileName = "\(prefix)-\(timestampMicroseconds)-\(UUID().uuidString).mp4"
+            let url = directory.appendingPathComponent(fileName)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
         }
     }
 }

@@ -134,6 +134,10 @@ final class RollingBufferRecorder {
         guard isSessionActive else { return }
 
         let sampleTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        if let lastVideoTime = currentSegmentLastVideoTime,
+           CMTimeCompare(sampleTime, lastVideoTime) <= 0 {
+            return
+        }
 
         if shouldRotateCurrentSegment(at: sampleTime) {
             finishCurrentSegmentAndRegisterIfPossible()
@@ -151,21 +155,27 @@ final class RollingBufferRecorder {
         }
 
         guard let videoInput = currentVideoInput, videoInput.isReadyForMoreMediaData else { return }
-        _ = videoInput.append(sampleBuffer)
-        currentSegmentLastVideoTime = sampleTime
+        if videoInput.append(sampleBuffer) {
+            currentSegmentLastVideoTime = sampleTime
+        }
     }
 
     private func _ingestSystemAudio(_ sampleBuffer: CMSampleBuffer) {
         guard isSessionActive else { return }
 
-        if currentWriter == nil || currentSegmentStartTime == nil {
-            preVideoAudioBuffers.append(sampleBuffer)
-            if preVideoAudioBuffers.count > 200 {
-                preVideoAudioBuffers.removeFirst(preVideoAudioBuffers.count - 200)
-            }
+        let sampleTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+
+        guard currentWriter != nil, let segmentStart = currentSegmentStartTime else {
+            bufferAudioUntilMatchingVideoSegment(sampleBuffer)
             return
         }
 
+        guard audioSampleBelongsToCurrentSegment(sampleTime, segmentStart: segmentStart) else {
+            if CMTimeCompare(sampleTime, segmentStart) > 0 {
+                bufferAudioUntilMatchingVideoSegment(sampleBuffer)
+            }
+            return
+        }
         guard let audioInput = currentAudioInput, audioInput.isReadyForMoreMediaData else { return }
         _ = audioInput.append(sampleBuffer)
     }
@@ -190,7 +200,6 @@ final class RollingBufferRecorder {
         } catch {
             return
         }
-        try? FileManager.default.removeItem(at: segmentURL)
 
         do {
             let writer = try AVAssetWriter(outputURL: segmentURL, fileType: .mp4)
@@ -226,16 +235,41 @@ final class RollingBufferRecorder {
     }
 
     private func flushPreVideoAudioBuffers() {
-        guard let audioInput = currentAudioInput else {
+        guard let audioInput = currentAudioInput,
+              let segmentStart = currentSegmentStartTime
+        else {
             preVideoAudioBuffers.removeAll()
             return
         }
+        var deferredBuffers: [CMSampleBuffer] = []
         for buf in preVideoAudioBuffers {
+            let sampleTime = CMSampleBufferGetPresentationTimeStamp(buf)
+            guard audioSampleBelongsToCurrentSegment(sampleTime, segmentStart: segmentStart) else {
+                if CMTimeCompare(sampleTime, segmentStart) > 0 {
+                    deferredBuffers.append(buf)
+                }
+                continue
+            }
             if audioInput.isReadyForMoreMediaData {
                 _ = audioInput.append(buf)
+            } else {
+                deferredBuffers.append(buf)
             }
         }
-        preVideoAudioBuffers.removeAll()
+        preVideoAudioBuffers = Array(deferredBuffers.suffix(200))
+    }
+
+    private func audioSampleBelongsToCurrentSegment(_ sampleTime: CMTime, segmentStart: CMTime) -> Bool {
+        guard CMTimeCompare(sampleTime, segmentStart) >= 0 else { return false }
+        let elapsed = CMTimeSubtract(sampleTime, segmentStart)
+        return CMTimeGetSeconds(elapsed) < RollingBufferConstants.segmentDurationSeconds
+    }
+
+    private func bufferAudioUntilMatchingVideoSegment(_ sampleBuffer: CMSampleBuffer) {
+        preVideoAudioBuffers.append(sampleBuffer)
+        if preVideoAudioBuffers.count > 200 {
+            preVideoAudioBuffers.removeFirst(preVideoAudioBuffers.count - 200)
+        }
     }
 
     private func finishCurrentSegmentAndRegisterIfPossible() {

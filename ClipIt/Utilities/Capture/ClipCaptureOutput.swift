@@ -22,6 +22,7 @@ final class ClipCaptureOutput: NSObject, SCStreamOutput {
     ) {
         switch outputType {
         case .screen:
+            guard isCompleteScreenFrame(sampleBuffer) else { return }
             recorder?.ingestScreenSample(sampleBuffer)
         case .audio:
             recorder?.ingestSystemAudioSample(sampleBuffer)
@@ -30,6 +31,20 @@ final class ClipCaptureOutput: NSObject, SCStreamOutput {
         @unknown default:
             break
         }
+    }
+
+    private func isCompleteScreenFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
+        guard let attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(
+            sampleBuffer,
+            createIfNecessary: false
+        ) as? [[SCStreamFrameInfo: Any]],
+            let attachments = attachmentsArray.first,
+            let statusRawValue = attachments[SCStreamFrameInfo.status] as? Int,
+            let status = SCFrameStatus(rawValue: statusRawValue)
+        else {
+            return false
+        }
+        return status == .complete
     }
 
     //    func stream(

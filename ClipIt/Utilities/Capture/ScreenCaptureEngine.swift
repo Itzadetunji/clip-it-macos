@@ -17,8 +17,7 @@ enum ScreenCaptureEngineError: Error {
 @MainActor
 final class ScreenCaptureEngine {
     private var stream: SCStream?
-    private let screenHandlerQueue = DispatchQueue(label: "clipit.sck.screen", qos: .userInitiated)
-    private let audioHandlerQueue = DispatchQueue(label: "clipit.sck.system-audio", qos: .userInitiated)
+    private let sampleHandlerQueue = DispatchQueue(label: "clipit.sck.samples", qos: .userInitiated)
     private let output: ClipCaptureOutput
     private let streamDelegate = ClipStreamDelegate()
     init(rollingBufferRecorder: RollingBufferRecorder) {
@@ -68,12 +67,12 @@ final class ScreenCaptureEngine {
         try stream.addStreamOutput(
             output,
             type: .screen,
-            sampleHandlerQueue: screenHandlerQueue
+            sampleHandlerQueue: sampleHandlerQueue
         )
         try stream.addStreamOutput(
             output,
             type: .audio,
-            sampleHandlerQueue: audioHandlerQueue
+            sampleHandlerQueue: sampleHandlerQueue
         )
         try await stream.startCapture()
         self.stream = stream
