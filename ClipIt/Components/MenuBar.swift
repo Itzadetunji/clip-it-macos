@@ -48,8 +48,12 @@ struct ClipItMenuBarExtra: Scene {
             }
 
             do {
+                let settings = loadSettings()
                 let url = try await RecordingCoordinator.shared
-                    .exportRollingClip(durationSeconds: duration)
+                    .exportRollingClip(
+                        durationSeconds: duration,
+                        saveLocation: settings.saveLocation
+                    )
 
                 print("Saved Clip to \(url.path)")
 
@@ -64,5 +68,16 @@ struct ClipItMenuBarExtra: Scene {
                 )
             }
         }
+    }
+
+    private func loadSettings() -> Settings {
+        guard
+            let data = UserDefaults.standard.data(forKey: "user"),
+            let settings = try? JSONDecoder().decode(Settings.self, from: data)
+        else {
+            return Settings()
+        }
+
+        return settings
     }
 }

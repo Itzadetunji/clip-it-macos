@@ -5,6 +5,7 @@
 //  Created by Adetunji Adeyinka on 12/05/2026.
 //
 
+import AppKit
 import Foundation
 
 struct Settings: Codable, Equatable {
@@ -14,6 +15,7 @@ struct Settings: Codable, Equatable {
     var IsCustom = false
     var CustomTime = 60
     var isRecording = false
+    var saveLocation: URL = defaultClipsDirectory()
 
     /// Resolved clip length in seconds based on user selection.
     /// - If custom is enabled, use `CustomTime` (minimum 1s).
@@ -26,6 +28,21 @@ struct Settings: Codable, Equatable {
     }
 }
 
+func defaultClipsDirectory() -> URL {
+    let downloadsURL = FileManager.default.urls(
+        for: .downloadsDirectory,
+        in: .userDomainMask
+    ).first!
+
+    let clipsFolder = downloadsURL.appendingPathComponent("Clips")
+
+    try? FileManager.default.createDirectory(
+        at: clipsFolder,
+        withIntermediateDirectories: true
+    )
+
+    return clipsFolder
+}
 
 enum Times: Int, Codable {
     case fifteen = 15_000

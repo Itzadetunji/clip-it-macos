@@ -16,6 +16,8 @@ final class HomeViewModel {
     var alertItem: AlertItem?
     var microphoneAlert: TwoButtonAlertItem?
 
+    //  MARK: Get and Save user
+
     func saveChanges() {
         do {
             let data = try JSONEncoder().encode(userSettings)
@@ -40,6 +42,27 @@ final class HomeViewModel {
             alertItem = AlertContext.invalidUserData
 
         }
+    }
+
+
+
+    func selectExportFolder() -> Void {
+
+        let panel = NSOpenPanel()
+
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select"
+
+        let response = panel.runModal()
+
+         if (response == .OK)
+             {
+                userSettings.saveLocation = panel.url!
+            } else {
+                userSettings.saveLocation = defaultClipsDirectory()
+         }
     }
 
     @MainActor
@@ -99,7 +122,8 @@ final class HomeViewModel {
         let seconds = userSettings.clipDurationSeconds
         do {
             let url = try await RecordingCoordinator.shared.exportRollingClip(
-                durationSeconds: seconds
+                durationSeconds: seconds,
+                saveLocation: userSettings.saveLocation
             )
             print("Saved clip to \(url.path)")
             scheduleNotification(

@@ -43,13 +43,13 @@ struct HomeView: View {
                 )
             }
 
-            preferenceRow(label: "Startup") {
-                Toggle(
-                    "Launch on Login",
-                    isOn: $viewModel.userSettings.launchOnLogin
-                )
-                .toggleStyle(.checkbox)
-            }
+            //            preferenceRow(label: "Startup") {
+            //                Toggle(
+            //                    "Launch on Login",
+            //                    isOn: $viewModel.userSettings.launchOnLogin
+            //                )
+            //                .toggleStyle(.checkbox)
+            //            }
 
             //            preferenceRow(label: "Status Bar Icon", alignment: .top) {
             //                VStack(alignment: .leading) {
@@ -127,7 +127,7 @@ struct HomeView: View {
                             set: {
                                 (newValue: String) in
                                 viewModel.userSettings.CustomTime =
-                                min(abs(Int(newValue) ?? 1) , 120)
+                                    min(abs(Int(newValue) ?? 1), 120)
                             }
                         )
                     ).frame(maxWidth: 50)
@@ -138,6 +138,23 @@ struct HomeView: View {
                     .easeInOut(duration: 0.15),
                     value: viewModel.userSettings.IsCustom
                 )
+            }
+
+            preferenceRow(label: "Export Location") {
+                HStack {
+                    Button {
+                        viewModel.selectExportFolder()
+                    } label: {
+                        Label("Save Location", systemImage: "arrow.up.folder")
+                    }.buttonStyle(.plain)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 6)
+                        .background(.tertiary)
+                        .cornerRadius(6)
+
+                    Text("\(viewModel.userSettings.saveLocation.relativePath)")
+                }
+
             }
 
         }
