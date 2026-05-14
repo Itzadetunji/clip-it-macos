@@ -12,8 +12,8 @@ struct AboutView: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack {
-                Text("Clip It")
-                    .font(SofiaFont.light(size: 64))
+                Text("ClipIt")
+                    .font(SofiaFont.ultraLight(size: 64))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("© \(year) ClipIt. All rights reserved.")
                         .font(.caption)
