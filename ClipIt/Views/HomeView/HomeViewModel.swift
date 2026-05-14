@@ -90,7 +90,7 @@ final class HomeViewModel {
             alertItem = AlertContext.captureError(error)
         }
     }
-    
+
     // MARK: - Clip export
 
     @MainActor
@@ -98,8 +98,14 @@ final class HomeViewModel {
         guard userSettings.isRecording else { return }
         let seconds = userSettings.clipDurationSeconds
         do {
-            let url = try await RecordingCoordinator.shared.exportRollingClip(durationSeconds: seconds)
+            let url = try await RecordingCoordinator.shared.exportRollingClip(
+                durationSeconds: seconds
+            )
             print("Saved clip to \(url.path)")
+            scheduleNotification(
+                title: "Clip Saved",
+                body: "Your clip has been saved successfully"
+            )
             // Optional: alertItem = … success
         } catch {
             alertItem = AlertContext.captureError(error)

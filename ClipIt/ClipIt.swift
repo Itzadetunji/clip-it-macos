@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 struct ClipIt: View {
     @State var currentTab: NavbarTab = NavbarTab.general
@@ -27,6 +28,21 @@ struct ClipIt: View {
         }
         .padding()
         .frame(width: 450, height: 200)
+        .task {
+            requestNotificationPermission()
+        }
+    }
+    
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: [.alert, .sound, .badge]
+        ) { granted, error in
+            if granted {
+                print("Notifications allowed")
+            } else {
+                print("Notifications denied")
+            }
+        }
     }
 }
 
