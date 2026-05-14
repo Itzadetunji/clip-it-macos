@@ -255,9 +255,17 @@ final class RollingBufferRecorder {
         writer.finishWriting { sem.signal() }
         _ = sem.wait(timeout: .now() + 15)
 
-        if FileManager.default.fileExists(atPath: segmentURL.path) {
-            segments.append(SegmentMetadata(url: segmentURL, startTime: segmentStart, endTime: segmentEnd))
-            pruneOldSegments(referenceTime: segmentEnd)
+        switch writer.status {
+        case .completed:
+            if FileManager.default.fileExists(atPath: segmentURL.path) {
+                segments.append(SegmentMetadata(url: segmentURL, startTime: segmentStart, endTime: segmentEnd))
+                pruneOldSegments(referenceTime: segmentEnd)
+            }
+        case .failed, .cancelled:
+            try? FileManager.default.removeItem(at: segmentURL)
+            // optional: log writer.error
+        default:
+            break
         }
     }
 
