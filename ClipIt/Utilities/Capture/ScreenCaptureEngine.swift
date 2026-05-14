@@ -24,7 +24,7 @@ final class ScreenCaptureEngine {
         self.output = ClipCaptureOutput(recorder: rollingBufferRecorder)
     }
 
-    func start() async throws {
+    func start(includeMicrophone: Bool) async throws {
         guard stream == nil else {
             throw ScreenCaptureEngineError.alreadyRunning
         }
@@ -58,6 +58,7 @@ final class ScreenCaptureEngine {
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = true
         configuration.capturesAudio = true
+        configuration.captureMicrophone = includeMicrophone
 
         let stream = SCStream(
             filter: filter,
@@ -74,6 +75,13 @@ final class ScreenCaptureEngine {
             type: .audio,
             sampleHandlerQueue: sampleHandlerQueue
         )
+        if includeMicrophone {
+            try stream.addStreamOutput(
+                output,
+                type: .microphone,
+                sampleHandlerQueue: sampleHandlerQueue
+            )
+        }
         try await stream.startCapture()
         self.stream = stream
     }

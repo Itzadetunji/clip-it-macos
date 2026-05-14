@@ -9,7 +9,7 @@ import AVFoundation
 import CoreMedia
 import Foundation
 
-/// Owns 1s rolling segment writers (video + system audio). All mutating work runs on `rollingQueue`.
+/// Owns 1s rolling segment writers (video + system audio + microphone audio). All mutating work runs on `rollingQueue`.
 final class RollingBufferRecorder {
     private let rollingQueue = DispatchQueue(label: "clipit.rolling-buffer", qos: .userInitiated)
     private let saveStateLock = NSLock()
@@ -20,11 +20,13 @@ final class RollingBufferRecorder {
 
     private var currentWriter: AVAssetWriter?
     private var currentVideoInput: AVAssetWriterInput?
-    private var currentAudioInput: AVAssetWriterInput?
+    private var currentSystemAudioInput: AVAssetWriterInput?
+    private var currentMicrophoneAudioInput: AVAssetWriterInput?
     private var currentSegmentURL: URL?
     private var currentSegmentStartTime: CMTime?
     private var currentSegmentLastVideoTime: CMTime?
-    private var preVideoAudioBuffers: [CMSampleBuffer] = []
+    private var preVideoSystemAudioBuffers: [CMSampleBuffer] = []
+    private var preVideoMicrophoneAudioBuffers: [CMSampleBuffer] = []
 
     // MARK: - Lifecycle
 
@@ -34,7 +36,8 @@ final class RollingBufferRecorder {
                 RollingSegmentsDirectory.removeAllRollingSegmentFiles()
                 self.segments.removeAll()
                 self.resetCurrentSegmentWriter()
-                self.preVideoAudioBuffers.removeAll()
+                self.preVideoSystemAudioBuffers.removeAll()
+                self.preVideoMicrophoneAudioBuffers.removeAll()
                 self.isSessionActive = true
                 cont.resume()
             }
@@ -49,7 +52,8 @@ final class RollingBufferRecorder {
                 self.resetCurrentSegmentWriter()
                 self.segments.removeAll()
                 RollingSegmentsDirectory.removeAllRollingSegmentFiles()
-                self.preVideoAudioBuffers.removeAll()
+                self.preVideoSystemAudioBuffers.removeAll()
+                self.preVideoMicrophoneAudioBuffers.removeAll()
                 cont.resume()
             }
         }
@@ -67,7 +71,14 @@ final class RollingBufferRecorder {
     func ingestSystemAudioSample(_ sampleBuffer: CMSampleBuffer) {
         guard let copy = Self.copySample(sampleBuffer) else { return }
         rollingQueue.async { [weak self] in
-            self?._ingestSystemAudio(copy)
+            self?._ingestAudio(copy, source: .system)
+        }
+    }
+
+    func ingestMicrophoneAudioSample(_ sampleBuffer: CMSampleBuffer) {
+        guard let copy = Self.copySample(sampleBuffer) else { return }
+        rollingQueue.async { [weak self] in
+            self?._ingestAudio(copy, source: .microphone)
         }
     }
 
@@ -160,23 +171,23 @@ final class RollingBufferRecorder {
         }
     }
 
-    private func _ingestSystemAudio(_ sampleBuffer: CMSampleBuffer) {
+    private func _ingestAudio(_ sampleBuffer: CMSampleBuffer, source: AudioSource) {
         guard isSessionActive else { return }
 
         let sampleTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
 
         guard currentWriter != nil, let segmentStart = currentSegmentStartTime else {
-            bufferAudioUntilMatchingVideoSegment(sampleBuffer)
+            bufferAudioUntilMatchingVideoSegment(sampleBuffer, source: source)
             return
         }
 
         guard audioSampleBelongsToCurrentSegment(sampleTime, segmentStart: segmentStart) else {
             if CMTimeCompare(sampleTime, segmentStart) > 0 {
-                bufferAudioUntilMatchingVideoSegment(sampleBuffer)
+                bufferAudioUntilMatchingVideoSegment(sampleBuffer, source: source)
             }
             return
         }
-        guard let audioInput = currentAudioInput, audioInput.isReadyForMoreMediaData else { return }
+        guard let audioInput = audioInput(for: source), audioInput.isReadyForMoreMediaData else { return }
         _ = audioInput.append(sampleBuffer)
     }
 
@@ -219,15 +230,22 @@ final class RollingBufferRecorder {
                 AVNumberOfChannelsKey: 2,
                 AVEncoderBitRateKey: 128_000,
             ]
-            let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-            audioInput.expectsMediaDataInRealTime = true
-            if writer.canAdd(audioInput) {
-                writer.add(audioInput)
+            let systemAudioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+            systemAudioInput.expectsMediaDataInRealTime = true
+            if writer.canAdd(systemAudioInput) {
+                writer.add(systemAudioInput)
+                currentSystemAudioInput = systemAudioInput
+            }
+
+            let microphoneAudioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+            microphoneAudioInput.expectsMediaDataInRealTime = true
+            if writer.canAdd(microphoneAudioInput) {
+                writer.add(microphoneAudioInput)
+                currentMicrophoneAudioInput = microphoneAudioInput
             }
 
             currentWriter = writer
             currentVideoInput = videoInput
-            currentAudioInput = audioInput
             currentSegmentURL = segmentURL
         } catch {
             currentWriter = nil
@@ -235,14 +253,19 @@ final class RollingBufferRecorder {
     }
 
     private func flushPreVideoAudioBuffers() {
-        guard let audioInput = currentAudioInput,
-              let segmentStart = currentSegmentStartTime
-        else {
-            preVideoAudioBuffers.removeAll()
+        flushPreVideoAudioBuffers(for: .system)
+        flushPreVideoAudioBuffers(for: .microphone)
+    }
+
+    private func flushPreVideoAudioBuffers(for source: AudioSource) {
+        guard let audioInput = audioInput(for: source),
+              let segmentStart = currentSegmentStartTime else {
+            setPreVideoAudioBuffers([], for: source)
             return
         }
+
         var deferredBuffers: [CMSampleBuffer] = []
-        for buf in preVideoAudioBuffers {
+        for buf in preVideoAudioBuffers(for: source) {
             let sampleTime = CMSampleBufferGetPresentationTimeStamp(buf)
             guard audioSampleBelongsToCurrentSegment(sampleTime, segmentStart: segmentStart) else {
                 if CMTimeCompare(sampleTime, segmentStart) > 0 {
@@ -256,7 +279,7 @@ final class RollingBufferRecorder {
                 deferredBuffers.append(buf)
             }
         }
-        preVideoAudioBuffers = Array(deferredBuffers.suffix(200))
+        setPreVideoAudioBuffers(Array(deferredBuffers.suffix(200)), for: source)
     }
 
     private func audioSampleBelongsToCurrentSegment(_ sampleTime: CMTime, segmentStart: CMTime) -> Bool {
@@ -265,10 +288,18 @@ final class RollingBufferRecorder {
         return CMTimeGetSeconds(elapsed) < RollingBufferConstants.segmentDurationSeconds
     }
 
-    private func bufferAudioUntilMatchingVideoSegment(_ sampleBuffer: CMSampleBuffer) {
-        preVideoAudioBuffers.append(sampleBuffer)
-        if preVideoAudioBuffers.count > 200 {
-            preVideoAudioBuffers.removeFirst(preVideoAudioBuffers.count - 200)
+    private func bufferAudioUntilMatchingVideoSegment(_ sampleBuffer: CMSampleBuffer, source: AudioSource) {
+        switch source {
+        case .system:
+            preVideoSystemAudioBuffers.append(sampleBuffer)
+            if preVideoSystemAudioBuffers.count > 200 {
+                preVideoSystemAudioBuffers.removeFirst(preVideoSystemAudioBuffers.count - 200)
+            }
+        case .microphone:
+            preVideoMicrophoneAudioBuffers.append(sampleBuffer)
+            if preVideoMicrophoneAudioBuffers.count > 200 {
+                preVideoMicrophoneAudioBuffers.removeFirst(preVideoMicrophoneAudioBuffers.count - 200)
+            }
         }
     }
 
@@ -283,7 +314,8 @@ final class RollingBufferRecorder {
         }
 
         currentVideoInput?.markAsFinished()
-        currentAudioInput?.markAsFinished()
+        currentSystemAudioInput?.markAsFinished()
+        currentMicrophoneAudioInput?.markAsFinished()
 
         let sem = DispatchSemaphore(value: 0)
         writer.finishWriting { sem.signal() }
@@ -325,10 +357,38 @@ final class RollingBufferRecorder {
     private func resetCurrentSegmentWriter() {
         currentWriter = nil
         currentVideoInput = nil
-        currentAudioInput = nil
+        currentSystemAudioInput = nil
+        currentMicrophoneAudioInput = nil
         currentSegmentURL = nil
         currentSegmentStartTime = nil
         currentSegmentLastVideoTime = nil
+    }
+
+    private func audioInput(for source: AudioSource) -> AVAssetWriterInput? {
+        switch source {
+        case .system:
+            return currentSystemAudioInput
+        case .microphone:
+            return currentMicrophoneAudioInput
+        }
+    }
+
+    private func preVideoAudioBuffers(for source: AudioSource) -> [CMSampleBuffer] {
+        switch source {
+        case .system:
+            return preVideoSystemAudioBuffers
+        case .microphone:
+            return preVideoMicrophoneAudioBuffers
+        }
+    }
+
+    private func setPreVideoAudioBuffers(_ buffers: [CMSampleBuffer], for source: AudioSource) {
+        switch source {
+        case .system:
+            preVideoSystemAudioBuffers = buffers
+        case .microphone:
+            preVideoMicrophoneAudioBuffers = buffers
+        }
     }
 
     private static func copySample(_ sampleBuffer: CMSampleBuffer) -> CMSampleBuffer? {
@@ -341,4 +401,9 @@ final class RollingBufferRecorder {
         guard status == noErr else { return nil }
         return copy
     }
+}
+
+private enum AudioSource {
+    case system
+    case microphone
 }

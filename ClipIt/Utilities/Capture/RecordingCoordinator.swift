@@ -13,7 +13,6 @@ final class RecordingCoordinator {
 
     private let rollingBuffer = RollingBufferRecorder()
     private let screen: ScreenCaptureEngine
-    private let microphone = MicrophoneCapture()
     private(set) var isRecording = false
 
     private init() {
@@ -22,12 +21,13 @@ final class RecordingCoordinator {
 
     func startCapture(includeMicrophone: Bool = true) async throws {
         guard !isRecording else { return }
+        if includeMicrophone {
+            try MicrophoneCapture.validateDefaultInputDevice()
+        }
         await rollingBuffer.beginSession()
-        try await screen.start()
         do {
-            if includeMicrophone { try microphone.start() }
+            try await screen.start(includeMicrophone: includeMicrophone)
         } catch {
-            try? await screen.stop()
             await rollingBuffer.endSession()
             throw error
         }
@@ -37,7 +37,6 @@ final class RecordingCoordinator {
     func stopCapture() async throws {
         guard isRecording else { return }
         try await screen.stop()
-        microphone.stop()
         await rollingBuffer.endSession()
         isRecording = false
     }

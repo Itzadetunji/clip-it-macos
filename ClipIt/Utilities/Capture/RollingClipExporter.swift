@@ -10,7 +10,7 @@ import CoreMedia
 import Foundation
 
 enum RollingClipExporter {
-    /// Stitches overlapping rolling segments into one MP4 (video + first audio track per segment = system audio).
+    /// Stitches overlapping rolling segments into one MP4 (video + all audio tracks per segment).
     static func export(
         segments snapshot: [SegmentMetadata],
         durationSeconds: Double,
@@ -43,10 +43,7 @@ enum RollingClipExporter {
         ) else {
             throw RollingBufferError.writerFailed("Could not create video track.")
         }
-        let audioTrack = composition.addMutableTrack(
-            withMediaType: .audio,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        )
+        var audioTracks: [AVMutableCompositionTrack] = []
 
         var insertionTime = CMTime.zero
         for segment in selected {
@@ -61,8 +58,17 @@ enum RollingClipExporter {
                 )
             }
             let aTracks = try await asset.loadTracks(withMediaType: .audio)
-            if let src = aTracks.first, let audioTrack {
-                try audioTrack.insertTimeRange(
+            for (index, src) in aTracks.enumerated() {
+                while audioTracks.count <= index {
+                    guard let track = composition.addMutableTrack(
+                        withMediaType: .audio,
+                        preferredTrackID: kCMPersistentTrackID_Invalid
+                    ) else {
+                        throw RollingBufferError.writerFailed("Could not create audio track.")
+                    }
+                    audioTracks.append(track)
+                }
+                try audioTracks[index].insertTimeRange(
                     CMTimeRange(start: .zero, duration: duration),
                     of: src,
                     at: insertionTime

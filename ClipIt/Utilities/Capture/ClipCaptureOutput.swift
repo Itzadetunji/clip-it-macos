@@ -27,7 +27,7 @@ final class ClipCaptureOutput: NSObject, SCStreamOutput {
         case .audio:
             recorder?.ingestSystemAudioSample(sampleBuffer)
         case .microphone:
-            break
+            recorder?.ingestMicrophoneAudioSample(sampleBuffer)
         @unknown default:
             break
         }
