@@ -17,16 +17,28 @@ struct ClipItMenuBarExtra: Scene {
             } label: {
                 Label("Open ClipIt", systemImage: "macwindow")
             }
-            Button("Save 15s") {
-                saveClip(duration: 15)
+
+            Menu("Save Clip") {
+
+                Button("Save 15s") {
+                    saveClip(duration: 15)
+                }
+
+                Button("Save 30s") {
+                    saveClip(duration: 30)
+                }
+
+                Button("Save 60s") {
+                    saveClip(duration: 60)
+                }
             }
-            Button("Save 30s") {
-                saveClip(duration: 30)
-            }
-            Button("Save 60s") {
-                saveClip(duration: 60)
-            }
+
             Divider()
+
+            Button("Stop Recording") {
+                stopRecording()
+            }
+
             Button {
                 NSApplication.shared.terminate(nil)
             } label: {
@@ -38,6 +50,19 @@ struct ClipItMenuBarExtra: Scene {
     private func openMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.windows.forEach { $0.makeKeyAndOrderFront(nil) }
+    }
+
+    private func stopRecording() {
+        Task { @MainActor in
+            do {
+                try await RecordingCoordinator.shared.stopCapture()
+            } catch {
+                scheduleNotification(
+                    title: "Stop Recording Failed",
+                    body: error.localizedDescription
+                )
+            }
+        }
     }
 
     private func saveClip(duration: Double) {
