@@ -73,7 +73,7 @@ final class RollingBufferRecorder {
 
     // MARK: - Export
 
-    func exportLastSeconds(_ durationSeconds: Double) async throws -> URL {
+    func exportLastSeconds(_ durationSeconds: Double, to destinationDirectory: URL) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
             rollingQueue.async { [weak self] in
                 guard let self else {
@@ -97,7 +97,9 @@ final class RollingBufferRecorder {
 
                 let outputURL: URL
                 do {
-                    outputURL = try RollingSegmentsDirectory.newExportedClipURL()
+                    outputURL = try RollingSegmentsDirectory.newExportedClipURL(
+                        in: destinationDirectory
+                    )
                 } catch {
                     self.saveStateLock.lock()
                     self.isSavingClip = false

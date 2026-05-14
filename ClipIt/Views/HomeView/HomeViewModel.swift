@@ -46,23 +46,30 @@ final class HomeViewModel {
 
 
 
-    func selectExportFolder() -> Void {
-
+    func selectExportFolder() {
         let panel = NSOpenPanel()
 
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Select"
+        panel.directoryURL = userSettings.saveLocation
 
         let response = panel.runModal()
 
-         if (response == .OK)
-             {
-                userSettings.saveLocation = panel.url!
-            } else {
-                userSettings.saveLocation = defaultClipsDirectory()
-         }
+        guard response == .OK, let selectedURL = panel.url else { return }
+
+        do {
+            let bookmarkData = try SaveLocationAccess.bookmarkData(
+                for: selectedURL
+            )
+            try SaveLocationAccess.validateWritableDirectory(selectedURL)
+            userSettings.saveLocation = selectedURL
+            userSettings.saveLocationBookmarkData = bookmarkData
+        } catch {
+            alertItem = AlertContext.captureError(error)
+        }
     }
 
     @MainActor
@@ -122,7 +129,9 @@ final class HomeViewModel {
         let seconds = userSettings.clipDurationSeconds
         do {
             let url = try await RecordingCoordinator.shared.exportRollingClip(
-                durationSeconds: seconds
+                durationSeconds: seconds,
+                saveLocation: userSettings.saveLocation,
+                bookmarkData: userSettings.saveLocationBookmarkData
             )
             print("Saved clip to \(url.path)")
             scheduleNotification(

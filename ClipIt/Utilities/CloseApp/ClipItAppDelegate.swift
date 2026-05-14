@@ -16,7 +16,9 @@ final class ClipItAppDelegate: NSObject, NSApplicationDelegate {
                 do {
                     let settings = self.loadSettings()
                     let url = try await RecordingCoordinator.shared.exportRollingClip(
-                        durationSeconds: settings.clipDurationSeconds
+                        durationSeconds: settings.clipDurationSeconds,
+                        saveLocation: settings.saveLocation,
+                        bookmarkData: settings.saveLocationBookmarkData
                     )
                     print("Saved clip to \(url.path)")
                     scheduleNotification(

@@ -52,6 +52,8 @@ struct ClipItMenuBarExtra: Scene {
                 let url = try await RecordingCoordinator.shared
                     .exportRollingClip(
                         durationSeconds: duration,
+                        saveLocation: settings.saveLocation,
+                        bookmarkData: settings.saveLocationBookmarkData
                     )
 
                 print("Saved Clip to \(url.path)")

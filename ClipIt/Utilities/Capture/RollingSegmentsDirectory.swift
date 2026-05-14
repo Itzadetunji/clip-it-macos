@@ -30,8 +30,14 @@ enum RollingSegmentsDirectory {
         return uniqueFileURL(in: dir, prefix: "Segment")
     }
 
-    static func newExportedClipURL() throws -> URL {
-        let dir = try savedClipsURL()
+    static func newExportedClipURL(in directory: URL? = nil) throws -> URL {
+        let dir: URL
+        if let directory {
+            dir = directory
+        } else {
+            dir = try savedClipsURL()
+        }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return uniqueFileURL(in: dir, prefix: "Clip")
     }
 

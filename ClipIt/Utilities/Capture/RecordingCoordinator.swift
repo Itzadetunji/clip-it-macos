@@ -42,8 +42,20 @@ final class RecordingCoordinator {
         isRecording = false
     }
 
-    /// Exports the most recent `durationSeconds` of rolling capture to **Application Support/ClipIt/SavedClips**.
-    func exportRollingClip(durationSeconds: Double) async throws -> URL {
-        try await rollingBuffer.exportLastSeconds(durationSeconds)
+    /// Exports the most recent `durationSeconds` of rolling capture to the user's selected folder.
+    func exportRollingClip(
+        durationSeconds: Double,
+        saveLocation: URL,
+        bookmarkData: Data?
+    ) async throws -> URL {
+        try await SaveLocationAccess.withWritableAccess(
+            to: saveLocation,
+            bookmarkData: bookmarkData
+        ) { destinationDirectory in
+            try await rollingBuffer.exportLastSeconds(
+                durationSeconds,
+                to: destinationDirectory
+            )
+        }
     }
 }

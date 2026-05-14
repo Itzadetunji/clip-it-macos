@@ -16,6 +16,7 @@ struct Settings: Codable, Equatable {
     var CustomTime = 60
     var isRecording = false
     var saveLocation: URL = defaultClipsDirectory()
+    var saveLocationBookmarkData: Data?
 
     /// Resolved clip length in seconds based on user selection.
     /// - If custom is enabled, use `CustomTime` (minimum 1s).
