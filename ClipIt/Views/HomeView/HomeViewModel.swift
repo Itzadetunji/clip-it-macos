@@ -122,8 +122,7 @@ final class HomeViewModel {
         let seconds = userSettings.clipDurationSeconds
         do {
             let url = try await RecordingCoordinator.shared.exportRollingClip(
-                durationSeconds: seconds,
-                saveLocation: userSettings.saveLocation
+                durationSeconds: seconds
             )
             print("Saved clip to \(url.path)")
             scheduleNotification(
