@@ -29,7 +29,7 @@ struct HomeView: View {
 
                     if viewModel.userSettings.isRecording {
                         Button {
-                            Task { await viewModel.setRecording(false) }
+                            Task { await viewModel.exportCurrentRollingClip() }
                         } label: {
                             Text("Clip It")
                         }

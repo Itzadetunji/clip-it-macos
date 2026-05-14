@@ -17,16 +17,13 @@ enum ScreenCaptureEngineError: Error {
 @MainActor
 final class ScreenCaptureEngine {
     private var stream: SCStream?
-    private let screenHandlerQueue = DispatchQueue(
-        label: "clipit.sck.screen",
-        qos: .userInitiated
-    )
-    private let audioHandlerQueue = DispatchQueue(
-        label: "clipit.sck.system-audio",
-        qos: .userInitiated
-    )
-    private let output = ClipCaptureOutput()
+    private let screenHandlerQueue = DispatchQueue(label: "clipit.sck.screen", qos: .userInitiated)
+    private let audioHandlerQueue = DispatchQueue(label: "clipit.sck.system-audio", qos: .userInitiated)
+    private let output: ClipCaptureOutput
     private let streamDelegate = ClipStreamDelegate()
+    init(rollingBufferRecorder: RollingBufferRecorder) {
+        self.output = ClipCaptureOutput(recorder: rollingBufferRecorder)
+    }
 
     func start() async throws {
         guard stream == nil else {

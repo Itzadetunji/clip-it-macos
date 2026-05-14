@@ -90,4 +90,26 @@ final class HomeViewModel {
             alertItem = AlertContext.captureError(error)
         }
     }
+    
+    // MARK: - Clip export
+
+    static func clipDurationSeconds(from settings: Settings) -> Double {
+        if settings.IsCustom {
+            return Double(max(1, settings.CustomTime))
+        }
+        return Double(settings.Time.rawValue) / 1000.0
+    }
+
+    @MainActor
+    func exportCurrentRollingClip() async {
+        guard userSettings.isRecording else { return }
+        let seconds = Self.clipDurationSeconds(from: userSettings)
+        do {
+            let url = try await RecordingCoordinator.shared.exportRollingClip(durationSeconds: seconds)
+            print("Saved clip to \(url.path)")
+            // Optional: alertItem = … success
+        } catch {
+            alertItem = AlertContext.captureError(error)
+        }
+    }
 }
