@@ -41,6 +41,7 @@ struct NavBarButton: View {
     private var isSelected: Bool { tab == currentTab }
 
     var body: some View {
+        
         Button {
             withAnimation(.easeInOut(duration: 0.15)) {
                 currentTab = tab
@@ -64,7 +65,7 @@ struct NavBarButton: View {
         )
         .padding(0)
         .frame(width: 52, height: 52)
-        .buttonStyle(.glass)
+        .glassAltButtonStyle()
     }
 }
 

@@ -33,7 +33,7 @@ struct HomeView: View {
                         } label: {
                             Text("Clip It")
                         }
-                        .buttonStyle(.glass)
+                        .glassAltButtonStyle()
                         .transition(.opacity)
                     }
                 }
