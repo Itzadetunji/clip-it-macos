@@ -24,6 +24,7 @@ struct AboutView: View {
                 }
                 Spacer()
             }
+            
             HStack {
                 Link(
                     destination: URL(string: "https://get-clip-it.vercel.app/")!
