@@ -127,12 +127,13 @@ struct HomeView: View {
                             set: {
                                 (newValue: String) in
                                 viewModel.userSettings.CustomTime =
-                                    Int(newValue) ?? 0
+                                min(abs(Int(newValue) ?? 1) , 120)
                             }
                         )
-                    ).frame(maxWidth: 50).disabled(
-                        !viewModel.userSettings.IsCustom
-                    )
+                    ).frame(maxWidth: 50)
+                        .disabled(
+                            !viewModel.userSettings.IsCustom
+                        )
                 }.animation(
                     .easeInOut(duration: 0.15),
                     value: viewModel.userSettings.IsCustom
