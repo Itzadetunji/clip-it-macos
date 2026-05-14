@@ -38,7 +38,7 @@ enum RollingSegmentsDirectory {
             dir = try savedClipsURL()
         }
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return uniqueFileURL(in: dir, prefix: "Clip")
+        return uniqueExportedClipURL(in: dir)
     }
 
     static func removeAllRollingSegmentFiles() {
@@ -58,5 +58,27 @@ enum RollingSegmentsDirectory {
                 return url
             }
         }
+    }
+
+    private static func uniqueExportedClipURL(in directory: URL) -> URL {
+        let baseName = exportedClipBaseName()
+        var candidate = directory.appendingPathComponent("\(baseName).mp4")
+        var copyNumber = 2
+
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = directory.appendingPathComponent(
+                "\(baseName) \(copyNumber).mp4"
+            )
+            copyNumber += 1
+        }
+
+        return candidate
+    }
+
+    private static func exportedClipBaseName(date: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        return "ClipIt \(formatter.string(from: date))"
     }
 }
