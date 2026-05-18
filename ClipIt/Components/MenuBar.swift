@@ -10,7 +10,7 @@ import SwiftUI
 
 struct ClipItMenuBarExtra: Scene {
     var body: some Scene {
-        MenuBarExtra("Clip It", systemImage: "square.and.arrow.down.on.square")
+        MenuBarExtra("Clip It", image: "MenuBarIcon")
         {
             Button {
                 openMainWindow()
