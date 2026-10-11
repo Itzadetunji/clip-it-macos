@@ -24,6 +24,12 @@ final class ScreenCaptureEngine {
         self.output = ClipCaptureOutput(recorder: rollingBufferRecorder)
     }
 
+    /// Whether this macOS version can capture the microphone inside the screen stream (same clock and pipeline as video).
+    static var supportsMicrophoneCapture: Bool {
+        if #available(macOS 15.0, *) { return true }
+        return false
+    }
+
     func start(options: CaptureOptions) async throws {
         guard stream == nil else {
             throw ScreenCaptureEngineError.alreadyRunning
@@ -66,6 +72,10 @@ final class ScreenCaptureEngine {
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = true
         configuration.capturesAudio = true
+        let capturesMicrophone = options.includeMicrophone && Self.supportsMicrophoneCapture
+        if #available(macOS 15.0, *), capturesMicrophone {
+            configuration.captureMicrophone = true
+        }
 
         let stream = SCStream(
             filter: filter,
@@ -82,6 +92,13 @@ final class ScreenCaptureEngine {
             type: .audio,
             sampleHandlerQueue: sampleHandlerQueue
         )
+        if #available(macOS 15.0, *), capturesMicrophone {
+            try stream.addStreamOutput(
+                output,
+                type: .microphone,
+                sampleHandlerQueue: sampleHandlerQueue
+            )
+        }
         try await stream.startCapture()
         self.stream = stream
     }

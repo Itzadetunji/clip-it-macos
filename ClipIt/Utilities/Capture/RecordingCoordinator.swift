@@ -28,7 +28,7 @@ final class RecordingCoordinator {
         await rollingBuffer.beginSession(options: options)
         try await screen.start(options: options)
         do {
-            if options.includeMicrophone {
+            if options.includeMicrophone && !ScreenCaptureEngine.supportsMicrophoneCapture {
                 let rollingBuffer = rollingBuffer
                 try microphone.start { sampleBuffer in
                     rollingBuffer.ingestMicrophoneSample(sampleBuffer)

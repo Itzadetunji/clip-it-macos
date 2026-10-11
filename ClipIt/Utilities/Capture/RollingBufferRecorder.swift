@@ -78,8 +78,9 @@ nonisolated final class RollingBufferRecorder: @unchecked Sendable {
     }
 
     func ingestMicrophoneSample(_ sampleBuffer: CMSampleBuffer) {
+        guard let copy = Self.copySample(sampleBuffer) else { return }
         rollingQueue.async { [weak self] in
-            self?._ingestMicrophone(sampleBuffer)
+            self?._ingestMicrophone(copy)
         }
     }
 
