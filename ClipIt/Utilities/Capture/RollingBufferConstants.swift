@@ -13,6 +13,8 @@ nonisolated enum RollingBufferConstants {
     static let segmentDurationSeconds: Double = 1.0
     static let rollingWindowSeconds: Double = 120.0
     static let cmTimeScale: CMTimeScale = 600
+    /// How often the last frame is repeated while the screen is still (ScreenCaptureKit sends nothing new then).
+    static let stillFrameInterval: Double = 0.1
 
     static let systemAudioBitRate = 128_000
     static let microphoneBitRate = 96_000

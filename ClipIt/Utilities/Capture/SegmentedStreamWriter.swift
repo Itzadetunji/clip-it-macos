@@ -85,12 +85,11 @@ nonisolated final class SegmentedStreamWriter: NSObject, AVAssetWriterDelegate, 
         }
     }
 
-    /// The final flushed segment can report a zero-length primary track; it holds nothing worth keeping.
+    /// Every segment must be kept, even one without primary media: stitching stops at the first missing
+    /// segment, so dropping one would cut every clip that reaches back past it.
     private func segmentTiming(from report: AVAssetSegmentReport?) -> CMTimeRange? {
-        guard let track = report?.trackReports.first(where: { $0.mediaType == primaryMediaType }),
-              track.duration.isValid,
-              track.duration > .zero
-        else { return nil }
+        let tracks = report?.trackReports.filter { $0.duration.isValid && $0.duration > .zero } ?? []
+        guard let track = tracks.first(where: { $0.mediaType == primaryMediaType }) ?? tracks.first else { return nil }
         return CMTimeRange(start: track.earliestPresentationTimeStamp, duration: track.duration)
     }
 

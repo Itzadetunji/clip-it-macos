@@ -30,6 +30,8 @@ nonisolated final class RollingBufferRecorder: @unchecked Sendable {
     private var screenInitURL: URL?
     private var screenSegments: [SegmentMetadata] = []
     private var lastVideoTime: CMTime?
+    private var lastScreenSample: CMSampleBuffer?
+    private var stillFrameTimer: DispatchSourceTimer?
 
     private var microphoneStream: SegmentedStreamWriter?
     private var microphoneInput: AVAssetWriterInput?
@@ -45,6 +47,7 @@ nonisolated final class RollingBufferRecorder: @unchecked Sendable {
                 RollingSegmentsDirectory.removeAllRollingSegmentFiles()
                 self.options = options
                 self.isSessionActive = true
+                self.startStillFrameTimer()
                 cont.resume()
             }
         }
@@ -54,6 +57,8 @@ nonisolated final class RollingBufferRecorder: @unchecked Sendable {
         await withCheckedContinuation { cont in
             rollingQueue.async {
                 self.isSessionActive = false
+                self.stillFrameTimer?.cancel()
+                self.stillFrameTimer = nil
                 self.resetAllStreams()
                 RollingSegmentsDirectory.removeAllRollingSegmentFiles()
                 cont.resume()
@@ -183,6 +188,49 @@ nonisolated final class RollingBufferRecorder: @unchecked Sendable {
         guard let videoInput = screenVideoInput, videoInput.isReadyForMoreMediaData else { return }
         if videoInput.append(sampleBuffer) {
             lastVideoTime = sampleTime
+            lastScreenSample = sampleBuffer
+        }
+    }
+
+    /// ScreenCaptureKit sends no new frames while the screen is still. Without video, segments have no keyframe
+    /// to start a clip on, so the last frame is repeated until the screen changes again.
+    private func startStillFrameTimer() {
+        stillFrameTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: rollingQueue)
+        timer.schedule(deadline: .now() + RollingBufferConstants.stillFrameInterval, repeating: RollingBufferConstants.stillFrameInterval)
+        timer.setEventHandler { [weak self] in
+            self?.repeatLastFrameIfStill()
+        }
+        timer.resume()
+        stillFrameTimer = timer
+    }
+
+    private func repeatLastFrameIfStill() {
+        guard isSessionActive,
+              let lastScreenSample,
+              let lastVideoTime,
+              let videoInput = screenVideoInput,
+              videoInput.isReadyForMoreMediaData
+        else { return }
+
+        // Stamped slightly in the past so a real frame captured just before this tick isn't rejected as out of order.
+        let now = CMClockGetTime(CMClockGetHostTimeClock())
+        let repeatTime = CMTimeSubtract(now, CMTime(seconds: RollingBufferConstants.stillFrameInterval / 2, preferredTimescale: 1_000_000))
+        let stillThreshold = CMTime(seconds: RollingBufferConstants.stillFrameInterval, preferredTimescale: 1_000_000)
+        guard CMTimeCompare(CMTimeSubtract(repeatTime, lastVideoTime), stillThreshold) >= 0 else { return }
+
+        var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: repeatTime, decodeTimeStamp: .invalid)
+        var repeated: CMSampleBuffer?
+        guard CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: lastScreenSample,
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleBufferOut: &repeated
+        ) == noErr, let repeated else { return }
+
+        if videoInput.append(repeated) {
+            self.lastVideoTime = repeatTime
         }
     }
 
@@ -382,6 +430,7 @@ nonisolated final class RollingBufferRecorder: @unchecked Sendable {
         screenVideoInput = nil
         systemAudioInput = nil
         lastVideoTime = nil
+        lastScreenSample = nil
         screenInitURL.map { try? FileManager.default.removeItem(at: $0) }
         screenInitURL = nil
         screenSegments.forEach { try? FileManager.default.removeItem(at: $0.url) }
