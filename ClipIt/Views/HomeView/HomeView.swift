@@ -167,6 +167,7 @@ struct HomeView: View {
                 .labelsHidden()
                 .fixedSize()
             }
+            .disabled(viewModel.userSettings.isRecording)
 
             preferenceRow(label: "Frame Rate") {
                 Picker("Frame Rate", selection: $viewModel.userSettings.captureFrameRate) {
@@ -177,6 +178,7 @@ struct HomeView: View {
                 .labelsHidden()
                 .fixedSize()
             }
+            .disabled(viewModel.userSettings.isRecording)
 
             preferenceRow(label: "Export Format", alignment: .top) {
                 VStack(alignment: .leading) {
@@ -192,6 +194,7 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .disabled(viewModel.userSettings.isRecording)
 
             preferenceRow(label: "Export Location") {
                 HStack {
