@@ -11,6 +11,7 @@ import CoreMedia
 nonisolated enum MicrophoneCaptureError: LocalizedError {
     case noInputDevice
     case invalidInputFormat
+    case permissionDenied
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,8 @@ nonisolated enum MicrophoneCaptureError: LocalizedError {
             return "No default microphone input device is available."
         case .invalidInputFormat:
             return "The microphone format is invalid. Check your input device settings and try again."
+        case .permissionDenied:
+            return "ClipIt doesn't have access to your microphone. Turn it on in System Settings > Privacy & Security > Microphone, or turn off \"Record microphone\"."
         }
     }
 }
@@ -26,6 +29,20 @@ nonisolated final class MicrophoneCapture {
     private var engine: AVAudioEngine?
     private var didInstallTap = false
     private var isRunning = false
+
+    /// Without a grant macOS hands the app silent microphone buffers instead of failing.
+    static func requestAccess() async throws {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            return
+        case .notDetermined:
+            guard await AVCaptureDevice.requestAccess(for: .audio) else {
+                throw MicrophoneCaptureError.permissionDenied
+            }
+        default:
+            throw MicrophoneCaptureError.permissionDenied
+        }
+    }
 
     /// Called on the audio tap thread with mono PCM stamped on the host clock (same clock as ScreenCaptureKit).
     func start(onSampleBuffer: @escaping @Sendable (CMSampleBuffer) -> Void) throws {

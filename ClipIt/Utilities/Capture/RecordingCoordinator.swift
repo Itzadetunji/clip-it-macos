@@ -22,6 +22,9 @@ final class RecordingCoordinator {
 
     func startCapture(options: CaptureOptions) async throws {
         guard !isRecording else { return }
+        if options.includeMicrophone {
+            try await MicrophoneCapture.requestAccess()
+        }
         await rollingBuffer.beginSession(options: options)
         try await screen.start(options: options)
         do {
