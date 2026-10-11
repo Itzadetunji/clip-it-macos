@@ -8,7 +8,7 @@
 import SwiftUI
 import UserNotifications
 
-struct ClipIt: View {
+struct ClipIt: View {   
     @State var currentTab: NavbarTab = NavbarTab.general
 
     var body: some View {
