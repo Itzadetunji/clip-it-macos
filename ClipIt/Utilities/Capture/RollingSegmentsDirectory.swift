@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum RollingSegmentsDirectory {
+nonisolated enum RollingSegmentsDirectory {
     private static var supportURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("ClipIt", isDirectory: true)
@@ -25,9 +25,17 @@ enum RollingSegmentsDirectory {
         return url
     }
 
-    static func newRollingSegmentURL() throws -> URL {
+    static func newRollingFileURL(prefix: String) throws -> URL {
         let dir = try rollingSegmentsURL()
-        return uniqueFileURL(in: dir, prefix: "Segment")
+        return uniqueFileURL(in: dir, prefix: prefix)
+    }
+
+    /// Scratch files used while stitching an export; kept out of `RollingSegments` so stopping a session can't delete them mid-save.
+    static func newExportScratchURL() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipItExport", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return uniqueFileURL(in: dir, prefix: "Stitch")
     }
 
     static func newExportedClipURL(in directory: URL? = nil) throws -> URL {

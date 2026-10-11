@@ -8,33 +8,42 @@
 import AVFoundation
 import CoreMedia
 import Foundation
+import UniformTypeIdentifiers
 
-/// Owns 1s rolling segment writers (video + system audio). All mutating work runs on `rollingQueue`.
-final class RollingBufferRecorder {
+/// Owns the continuous segmented writers (screen + system audio, and optional microphone).
+/// All mutating work runs on `rollingQueue`, which is what makes the unchecked `Sendable` safe.
+nonisolated final class RollingBufferRecorder: @unchecked Sendable {
     private let rollingQueue = DispatchQueue(label: "clipit.rolling-buffer", qos: .userInitiated)
     private let saveStateLock = NSLock()
     private var isSavingClip = false
 
-    private var segments: [SegmentMetadata] = []
     private var isSessionActive = false
+    private var options = CaptureOptions(resolution: .p1440, frameRate: .fps60, includeMicrophone: false)
 
-    private var currentWriter: AVAssetWriter?
-    private var currentVideoInput: AVAssetWriterInput?
-    private var currentAudioInput: AVAssetWriterInput?
-    private var currentSegmentURL: URL?
-    private var currentSegmentStartTime: CMTime?
-    private var currentSegmentLastVideoTime: CMTime?
-    private var preVideoAudioBuffers: [CMSampleBuffer] = []
+    /// Bumped on every reset so late callbacks from a cancelled writer are ignored.
+    private var screenGeneration = 0
+    private var microphoneGeneration = 0
+
+    private var screenStream: SegmentedStreamWriter?
+    private var screenVideoInput: AVAssetWriterInput?
+    private var systemAudioInput: AVAssetWriterInput?
+    private var screenInitURL: URL?
+    private var screenSegments: [SegmentMetadata] = []
+    private var lastVideoTime: CMTime?
+
+    private var microphoneStream: SegmentedStreamWriter?
+    private var microphoneInput: AVAssetWriterInput?
+    private var microphoneInitURL: URL?
+    private var microphoneSegments: [SegmentMetadata] = []
 
     // MARK: - Lifecycle
 
-    func beginSession() async {
+    func beginSession(options: CaptureOptions) async {
         await withCheckedContinuation { cont in
             rollingQueue.async {
+                self.resetAllStreams()
                 RollingSegmentsDirectory.removeAllRollingSegmentFiles()
-                self.segments.removeAll()
-                self.resetCurrentSegmentWriter()
-                self.preVideoAudioBuffers.removeAll()
+                self.options = options
                 self.isSessionActive = true
                 cont.resume()
             }
@@ -45,11 +54,8 @@ final class RollingBufferRecorder {
         await withCheckedContinuation { cont in
             rollingQueue.async {
                 self.isSessionActive = false
-                self.finishCurrentSegmentAndRegisterIfPossible()
-                self.resetCurrentSegmentWriter()
-                self.segments.removeAll()
+                self.resetAllStreams()
                 RollingSegmentsDirectory.removeAllRollingSegmentFiles()
-                self.preVideoAudioBuffers.removeAll()
                 cont.resume()
             }
         }
@@ -71,39 +77,47 @@ final class RollingBufferRecorder {
         }
     }
 
+    func ingestMicrophoneSample(_ sampleBuffer: CMSampleBuffer) {
+        rollingQueue.async { [weak self] in
+            self?._ingestMicrophone(sampleBuffer)
+        }
+    }
+
     // MARK: - Export
 
-    func exportLastSeconds(_ durationSeconds: Double, to destinationDirectory: URL) async throws -> URL {
+    func exportLastSeconds(
+        _ durationSeconds: Double,
+        format: ClipExportFormat,
+        to destinationDirectory: URL
+    ) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
             rollingQueue.async { [weak self] in
                 guard let self else {
                     continuation.resume(throwing: RollingBufferError.noSegments)
                     return
                 }
-                let snapshot = self.segments.sorted { CMTimeCompare($0.startTime, $1.startTime) < 0 }
-                guard !snapshot.isEmpty else {
+                guard let screenInitURL = self.screenInitURL, !self.screenSegments.isEmpty else {
                     continuation.resume(throwing: RollingBufferError.noSegments)
                     return
                 }
+                let screen = SegmentedStreamSnapshot(
+                    initializationSegmentURL: screenInitURL,
+                    segments: self.screenSegments
+                )
+                let microphone = self.microphoneInitURL.map {
+                    SegmentedStreamSnapshot(initializationSegmentURL: $0, segments: self.microphoneSegments)
+                }
 
-                self.saveStateLock.lock()
-                if self.isSavingClip {
-                    self.saveStateLock.unlock()
+                guard self.beginSaving() else {
                     continuation.resume(throwing: RollingBufferError.saveInProgress)
                     return
                 }
-                self.isSavingClip = true
-                self.saveStateLock.unlock()
 
                 let outputURL: URL
                 do {
-                    outputURL = try RollingSegmentsDirectory.newExportedClipURL(
-                        in: destinationDirectory
-                    )
+                    outputURL = try RollingSegmentsDirectory.newExportedClipURL(in: destinationDirectory)
                 } catch {
-                    self.saveStateLock.lock()
-                    self.isSavingClip = false
-                    self.saveStateLock.unlock()
+                    self.endSaving()
                     continuation.resume(throwing: error)
                     return
                 }
@@ -111,23 +125,41 @@ final class RollingBufferRecorder {
                 Task {
                     do {
                         try await RollingClipExporter.export(
-                            segments: snapshot,
+                            screen: screen,
+                            microphone: microphone,
                             durationSeconds: durationSeconds,
+                            format: format,
                             outputURL: outputURL
                         )
-                        self.saveStateLock.lock()
-                        self.isSavingClip = false
-                        self.saveStateLock.unlock()
+                        self.endSaving()
                         continuation.resume(returning: outputURL)
                     } catch {
-                        self.saveStateLock.lock()
-                        self.isSavingClip = false
-                        self.saveStateLock.unlock()
+                        self.endSaving()
                         continuation.resume(throwing: error)
                     }
                 }
             }
         }
+    }
+
+    private func beginSaving() -> Bool {
+        saveStateLock.lock()
+        defer { saveStateLock.unlock() }
+        guard !isSavingClip else { return false }
+        isSavingClip = true
+        return true
+    }
+
+    private func endSaving() {
+        saveStateLock.lock()
+        isSavingClip = false
+        saveStateLock.unlock()
+    }
+
+    private var isSaving: Bool {
+        saveStateLock.lock()
+        defer { saveStateLock.unlock() }
+        return isSavingClip
     }
 
     // MARK: - Private ingest
@@ -136,183 +168,193 @@ final class RollingBufferRecorder {
         guard isSessionActive else { return }
 
         let sampleTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        if let lastVideoTime = currentSegmentLastVideoTime,
-           CMTimeCompare(sampleTime, lastVideoTime) <= 0 {
+        if let lastVideoTime, CMTimeCompare(sampleTime, lastVideoTime) <= 0 {
             return
         }
 
-        if shouldRotateCurrentSegment(at: sampleTime) {
-            finishCurrentSegmentAndRegisterIfPossible()
-            resetCurrentSegmentWriter()
+        if screenStream?.isFailed == true {
+            resetScreenStream()
+        }
+        if screenStream == nil {
+            startScreenStream(firstSample: sampleBuffer, at: sampleTime)
         }
 
-        ensureWriterConfiguredForVideo(sampleBuffer)
-        guard let writer = currentWriter else { return }
-
-        if currentSegmentStartTime == nil {
-            writer.startWriting()
-            writer.startSession(atSourceTime: sampleTime)
-            currentSegmentStartTime = sampleTime
-            flushPreVideoAudioBuffers()
-        }
-
-        guard let videoInput = currentVideoInput, videoInput.isReadyForMoreMediaData else { return }
+        guard let videoInput = screenVideoInput, videoInput.isReadyForMoreMediaData else { return }
         if videoInput.append(sampleBuffer) {
-            currentSegmentLastVideoTime = sampleTime
+            lastVideoTime = sampleTime
         }
     }
 
     private func _ingestSystemAudio(_ sampleBuffer: CMSampleBuffer) {
-        guard isSessionActive else { return }
-
-        let sampleTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-
-        guard currentWriter != nil, let segmentStart = currentSegmentStartTime else {
-            bufferAudioUntilMatchingVideoSegment(sampleBuffer)
-            return
-        }
-
-        guard audioSampleBelongsToCurrentSegment(sampleTime, segmentStart: segmentStart) else {
-            if CMTimeCompare(sampleTime, segmentStart) > 0 {
-                bufferAudioUntilMatchingVideoSegment(sampleBuffer)
-            }
-            return
-        }
-        guard let audioInput = currentAudioInput, audioInput.isReadyForMoreMediaData else { return }
+        guard isSessionActive, screenStream != nil else { return }
+        guard let audioInput = systemAudioInput, audioInput.isReadyForMoreMediaData else { return }
         _ = audioInput.append(sampleBuffer)
     }
 
-    private func shouldRotateCurrentSegment(at sampleTime: CMTime) -> Bool {
-        guard let start = currentSegmentStartTime else { return false }
-        let elapsed = CMTimeSubtract(sampleTime, start)
-        return CMTimeGetSeconds(elapsed) >= RollingBufferConstants.segmentDurationSeconds
+    private func _ingestMicrophone(_ sampleBuffer: CMSampleBuffer) {
+        guard isSessionActive, options.includeMicrophone else { return }
+
+        if microphoneStream?.isFailed == true {
+            resetMicrophoneStream()
+        }
+        if microphoneStream == nil {
+            startMicrophoneStream(at: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+        }
+
+        guard let input = microphoneInput, input.isReadyForMoreMediaData else { return }
+        _ = input.append(sampleBuffer)
     }
 
-    private func ensureWriterConfiguredForVideo(_ sampleBuffer: CMSampleBuffer) {
-        guard currentWriter == nil else { return }
-        guard let format = CMSampleBufferGetFormatDescription(sampleBuffer) else { return }
+    // MARK: - Stream setup
 
+    private func startScreenStream(firstSample: CMSampleBuffer, at time: CMTime) {
+        guard let format = CMSampleBufferGetFormatDescription(firstSample) else { return }
         let dimensions = CMVideoFormatDescriptionGetDimensions(format)
         let width = Int(dimensions.width)
         let height = Int(dimensions.height)
 
-        let segmentURL: URL
+        let videoInput = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: Self.videoSettings(width: width, height: height, frameRate: options.frameRate.rawValue),
+            sourceFormatHint: format
+        )
+        videoInput.expectsMediaDataInRealTime = true
+
+        let audioInput = AVAssetWriterInput(
+            mediaType: .audio,
+            outputSettings: Self.aacSettings(channels: 2, bitRate: RollingBufferConstants.systemAudioBitRate)
+        )
+        audioInput.expectsMediaDataInRealTime = true
+
+        let generation = screenGeneration
         do {
-            segmentURL = try RollingSegmentsDirectory.newRollingSegmentURL()
+            let stream = try SegmentedStreamWriter(
+                inputs: [videoInput, audioInput],
+                primaryMediaType: .video,
+                filePrefix: "Screen"
+            ) { [weak self] output in
+                self?.rollingQueue.async { self?.handleScreenOutput(output, generation: generation) }
+            }
+            try stream.start(at: time)
+            screenStream = stream
+            screenVideoInput = videoInput
+            systemAudioInput = audioInput
         } catch {
-            return
+            print("ClipIt: failed to start screen recorder: \(error)")
         }
+    }
 
+    private func startMicrophoneStream(at time: CMTime) {
+        let input = AVAssetWriterInput(
+            mediaType: .audio,
+            outputSettings: Self.aacSettings(channels: 1, bitRate: RollingBufferConstants.microphoneBitRate)
+        )
+        input.expectsMediaDataInRealTime = true
+
+        let generation = microphoneGeneration
         do {
-            let writer = try AVAssetWriter(outputURL: segmentURL, fileType: .mp4)
-            let videoSettings: [String: Any] = [
-                AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: width,
-                AVVideoHeightKey: height,
-            ]
-            let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings, sourceFormatHint: format)
-            videoInput.expectsMediaDataInRealTime = true
-            guard writer.canAdd(videoInput) else { return }
-            writer.add(videoInput)
-
-            let audioSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: 48_000,
-                AVNumberOfChannelsKey: 2,
-                AVEncoderBitRateKey: 128_000,
-            ]
-            let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-            audioInput.expectsMediaDataInRealTime = true
-            if writer.canAdd(audioInput) {
-                writer.add(audioInput)
+            let stream = try SegmentedStreamWriter(
+                inputs: [input],
+                primaryMediaType: .audio,
+                filePrefix: "Mic"
+            ) { [weak self] output in
+                self?.rollingQueue.async { self?.handleMicrophoneOutput(output, generation: generation) }
             }
-
-            currentWriter = writer
-            currentVideoInput = videoInput
-            currentAudioInput = audioInput
-            currentSegmentURL = segmentURL
+            try stream.start(at: time)
+            microphoneStream = stream
+            microphoneInput = input
         } catch {
-            currentWriter = nil
+            print("ClipIt: failed to start microphone recorder: \(error)")
         }
     }
 
-    private func flushPreVideoAudioBuffers() {
-        guard let audioInput = currentAudioInput,
-              let segmentStart = currentSegmentStartTime
-        else {
-            preVideoAudioBuffers.removeAll()
+    private static func videoSettings(width: Int, height: Int, frameRate: Int) -> [String: Any] {
+        let codec: AVVideoCodecType = hevcEncoderAvailable(width: width, height: height) ? .hevc : .h264
+        return [
+            AVVideoCodecKey: codec,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: RollingBufferConstants.videoBitRate(
+                    width: width,
+                    height: height,
+                    frameRate: frameRate,
+                    codec: codec
+                ),
+                AVVideoExpectedSourceFrameRateKey: frameRate,
+                AVVideoMaxKeyFrameIntervalDurationKey: RollingBufferConstants.segmentDurationSeconds,
+                AVVideoAllowFrameReorderingKey: false,
+            ],
+        ]
+    }
+
+    private static func hevcEncoderAvailable(width: Int, height: Int) -> Bool {
+        let probe = AVAssetWriter(contentType: UTType(AVFileType.mp4.rawValue)!)
+        return probe.canApply(
+            outputSettings: [AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: width, AVVideoHeightKey: height],
+            forMediaType: .video
+        )
+    }
+
+    private static func aacSettings(channels: Int, bitRate: Int) -> [String: Any] {
+        [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 48_000,
+            AVNumberOfChannelsKey: channels,
+            AVEncoderBitRateKey: bitRate,
+        ]
+    }
+
+    // MARK: - Segment bookkeeping
+
+    private func handleScreenOutput(_ output: SegmentedStreamWriter.Output, generation: Int) {
+        guard isSessionActive, generation == screenGeneration else {
+            Self.removeFile(of: output)
             return
         }
-        var deferredBuffers: [CMSampleBuffer] = []
-        for buf in preVideoAudioBuffers {
-            let sampleTime = CMSampleBufferGetPresentationTimeStamp(buf)
-            guard audioSampleBelongsToCurrentSegment(sampleTime, segmentStart: segmentStart) else {
-                if CMTimeCompare(sampleTime, segmentStart) > 0 {
-                    deferredBuffers.append(buf)
-                }
-                continue
-            }
-            if audioInput.isReadyForMoreMediaData {
-                _ = audioInput.append(buf)
-            } else {
-                deferredBuffers.append(buf)
-            }
-        }
-        preVideoAudioBuffers = Array(deferredBuffers.suffix(200))
-    }
-
-    private func audioSampleBelongsToCurrentSegment(_ sampleTime: CMTime, segmentStart: CMTime) -> Bool {
-        guard CMTimeCompare(sampleTime, segmentStart) >= 0 else { return false }
-        let elapsed = CMTimeSubtract(sampleTime, segmentStart)
-        return CMTimeGetSeconds(elapsed) < RollingBufferConstants.segmentDurationSeconds
-    }
-
-    private func bufferAudioUntilMatchingVideoSegment(_ sampleBuffer: CMSampleBuffer) {
-        preVideoAudioBuffers.append(sampleBuffer)
-        if preVideoAudioBuffers.count > 200 {
-            preVideoAudioBuffers.removeFirst(preVideoAudioBuffers.count - 200)
+        switch output {
+        case .initialization(let url):
+            screenInitURL = url
+        case .segment(let segment):
+            screenSegments.append(segment)
+            pruneOldSegments()
         }
     }
 
-    private func finishCurrentSegmentAndRegisterIfPossible() {
-        guard let writer = currentWriter,
-              let segmentURL = currentSegmentURL,
-              let segmentStart = currentSegmentStartTime,
-              let segmentEnd = currentSegmentLastVideoTime
-        else {
-            resetCurrentSegmentWriter()
+    private func handleMicrophoneOutput(_ output: SegmentedStreamWriter.Output, generation: Int) {
+        guard isSessionActive, generation == microphoneGeneration else {
+            Self.removeFile(of: output)
             return
         }
-
-        currentVideoInput?.markAsFinished()
-        currentAudioInput?.markAsFinished()
-
-        let sem = DispatchSemaphore(value: 0)
-        writer.finishWriting { sem.signal() }
-        _ = sem.wait(timeout: .now() + 15)
-
-        switch writer.status {
-        case .completed:
-            if FileManager.default.fileExists(atPath: segmentURL.path) {
-                segments.append(SegmentMetadata(url: segmentURL, startTime: segmentStart, endTime: segmentEnd))
-                pruneOldSegments(referenceTime: segmentEnd)
-            }
-        case .failed, .cancelled:
-            try? FileManager.default.removeItem(at: segmentURL)
-            // optional: log writer.error
-        default:
-            break
+        switch output {
+        case .initialization(let url):
+            microphoneInitURL = url
+        case .segment(let segment):
+            microphoneSegments.append(segment)
+            pruneOldSegments()
         }
     }
 
-    private func pruneOldSegments(referenceTime: CMTime) {
+    /// Skipped while a save is stitching files; the next segment catches up.
+    private func pruneOldSegments() {
+        guard !isSaving else { return }
+        let latestEnd = [screenSegments.last?.endTime, microphoneSegments.last?.endTime]
+            .compactMap { $0 }
+            .max { CMTimeCompare($0, $1) < 0 }
+        guard let latestEnd else { return }
+
         let cutoff = CMTimeSubtract(
-            referenceTime,
+            latestEnd,
             CMTime(
                 seconds: RollingBufferConstants.rollingWindowSeconds,
                 preferredTimescale: RollingBufferConstants.cmTimeScale
             )
         )
+        screenSegments = Self.removingSegments(endingBefore: cutoff, from: screenSegments)
+        microphoneSegments = Self.removingSegments(endingBefore: cutoff, from: microphoneSegments)
+    }
+
+    private static func removingSegments(endingBefore cutoff: CMTime, from segments: [SegmentMetadata]) -> [SegmentMetadata] {
         var kept: [SegmentMetadata] = []
         for segment in segments {
             if CMTimeCompare(segment.endTime, cutoff) < 0 {
@@ -321,16 +363,48 @@ final class RollingBufferRecorder {
                 kept.append(segment)
             }
         }
-        segments = kept.sorted { CMTimeCompare($0.startTime, $1.startTime) < 0 }
+        return kept
     }
 
-    private func resetCurrentSegmentWriter() {
-        currentWriter = nil
-        currentVideoInput = nil
-        currentAudioInput = nil
-        currentSegmentURL = nil
-        currentSegmentStartTime = nil
-        currentSegmentLastVideoTime = nil
+    // MARK: - Reset
+
+    private func resetAllStreams() {
+        resetScreenStream()
+        resetMicrophoneStream()
+    }
+
+    /// A new writer produces a new initialization segment, so earlier segments can't be stitched with it.
+    private func resetScreenStream() {
+        screenGeneration += 1
+        screenStream?.cancel()
+        screenStream = nil
+        screenVideoInput = nil
+        systemAudioInput = nil
+        lastVideoTime = nil
+        screenInitURL.map { try? FileManager.default.removeItem(at: $0) }
+        screenInitURL = nil
+        screenSegments.forEach { try? FileManager.default.removeItem(at: $0.url) }
+        screenSegments.removeAll()
+    }
+
+    private func resetMicrophoneStream() {
+        microphoneGeneration += 1
+        microphoneStream?.cancel()
+        microphoneStream = nil
+        microphoneInput = nil
+        microphoneInitURL.map { try? FileManager.default.removeItem(at: $0) }
+        microphoneInitURL = nil
+        microphoneSegments.forEach { try? FileManager.default.removeItem(at: $0.url) }
+        microphoneSegments.removeAll()
+    }
+
+    private static func removeFile(of output: SegmentedStreamWriter.Output) {
+        switch output {
+        case .initialization(let url):
+            try? FileManager.default.removeItem(at: url)
+        case .segment(let segment):
+            try? FileManager.default.removeItem(at: segment.url)
+        }
     }
 
     private static func copySample(_ sampleBuffer: CMSampleBuffer) -> CMSampleBuffer? {

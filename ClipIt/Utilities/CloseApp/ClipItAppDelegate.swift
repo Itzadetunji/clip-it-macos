@@ -14,11 +14,9 @@ final class ClipItAppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 guard RecordingCoordinator.shared.isRecording else { return }
                 do {
-                    let settings = self.loadSettings()
-                    let url = try await RecordingCoordinator.shared.exportRollingClip(
-                        durationSeconds: settings.clipDurationSeconds,
-                        saveLocation: settings.saveLocation,
-                        bookmarkData: settings.saveLocationBookmarkData
+                    let viewModel = HomeViewModel.shared
+                    let url = try await viewModel.exportRollingClip(
+                        durationSeconds: viewModel.userSettings.clipDurationSeconds
                     )
                     print("Saved clip to \(url.path)")
                     scheduleNotification(
@@ -34,18 +32,8 @@ final class ClipItAppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-    
-    private func loadSettings() -> Settings {
-        guard
-            let data = UserDefaults.standard.data(forKey: "user"),
-            let settings = try? JSONDecoder().decode(Settings.self, from: data)
-        else {
-            return Settings()
-        }
 
-        return settings
-    }
-    
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }

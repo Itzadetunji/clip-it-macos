@@ -9,7 +9,7 @@ import SwiftUI
 
 struct HomeView: View {
     @State var launchOnLogin: Bool = false
-    @State var viewModel = HomeViewModel()
+    @State var viewModel = HomeViewModel.shared
 
     var body: some View {
         VStack(alignment: .center, spacing: 12) {
@@ -140,6 +140,49 @@ struct HomeView: View {
                 )
             }
 
+            preferenceRow(label: "Microphone") {
+                Toggle(
+                    "Record microphone",
+                    isOn: $viewModel.userSettings.recordMicrophone
+                )
+                .toggleStyle(.checkbox)
+            }
+
+            preferenceRow(label: "Resolution") {
+                Picker("Resolution", selection: $viewModel.userSettings.captureResolution) {
+                    ForEach(CaptureResolution.allCases) { resolution in
+                        Text(resolution.label).tag(resolution)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+            }
+
+            preferenceRow(label: "Frame Rate") {
+                Picker("Frame Rate", selection: $viewModel.userSettings.captureFrameRate) {
+                    ForEach(CaptureFrameRate.allCases) { frameRate in
+                        Text(frameRate.label).tag(frameRate)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+            }
+
+            preferenceRow(label: "Export Format", alignment: .top) {
+                VStack(alignment: .leading) {
+                    Picker("Export Format", selection: $viewModel.userSettings.exportFormat) {
+                        ForEach(ClipExportFormat.allCases) { format in
+                            Text(format.label).tag(format)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    Text("H.264 plays everywhere but takes longer to save")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             preferenceRow(label: "Export Location") {
                 HStack {
                     Button {
@@ -163,9 +206,6 @@ struct HomeView: View {
         }
         .onAppear {
             viewModel.retrieveUser()
-        }
-        .onChange(of: viewModel.userSettings) { _, _ in
-            viewModel.saveChanges()
         }
         .alert(
             item: $viewModel.alertItem

@@ -1,5 +1,5 @@
 //
-//  RollingClipExporterswift
+//  RollingClipExporter.swift
 //  ClipIt
 //
 //  Created by Adetunji Adeyinka on 14/05/2026.
@@ -9,71 +9,122 @@ import AVFoundation
 import CoreMedia
 import Foundation
 
-enum RollingClipExporter {
-    /// Stitches overlapping rolling segments into one MP4 (video + first audio track per segment = system audio).
+nonisolated enum RollingClipExporter {
+    /// Stitches the most recent screen segments (video + system audio) and the overlapping microphone
+    /// segments into one MP4. Clips start on a segment boundary (a keyframe), so they can run up to ~1s
+    /// longer than requested.
     static func export(
-        segments snapshot: [SegmentMetadata],
+        screen: SegmentedStreamSnapshot,
+        microphone: SegmentedStreamSnapshot?,
         durationSeconds: Double,
+        format: ClipExportFormat,
         outputURL: URL
     ) async throws {
-        guard let latest = snapshot.last else {
+        let selected = latestSegments(in: screen.segments, covering: durationSeconds)
+        guard let windowStart = selected.first?.startTime else {
             throw RollingBufferError.noSegments
         }
 
-        let windowEnd = latest.endTime
-        let windowStart = CMTimeSubtract(
-            windowEnd,
-            CMTime(seconds: durationSeconds, preferredTimescale: RollingBufferConstants.cmTimeScale)
-        )
+        var scratchFiles: [URL] = []
+        defer { scratchFiles.forEach { try? FileManager.default.removeItem(at: $0) } }
 
-        let selected = snapshot.filter { segment in
-            CMTimeCompare(segment.endTime, windowStart) > 0
-                && CMTimeCompare(segment.startTime, windowEnd) < 0
-        }
-        guard !selected.isEmpty else {
-            throw RollingBufferError.noSegments
-        }
-
-        try? FileManager.default.removeItem(at: outputURL)
+        let screenURL = try stitch(initializationSegment: screen.initializationSegmentURL, segments: selected)
+        scratchFiles.append(screenURL)
+        let screenAsset = AVURLAsset(url: screenURL)
 
         let composition = AVMutableComposition()
-        guard let videoTrack = composition.addMutableTrack(
-            withMediaType: .video,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        ) else {
-            throw RollingBufferError.writerFailed("Could not create video track.")
+        guard let sourceVideo = try await screenAsset.loadTracks(withMediaType: .video).first else {
+            throw RollingBufferError.writerFailed("Recorded video track is missing.")
         }
-        let audioTrack = composition.addMutableTrack(
-            withMediaType: .audio,
-            preferredTrackID: kCMPersistentTrackID_Invalid
-        )
+        let clipDuration = try await sourceVideo.load(.timeRange).duration
+        let clipRange = CMTimeRange(start: .zero, duration: clipDuration)
+        let videoStart = CMTimeAdd(windowStart, try await editListOffset(of: sourceVideo))
 
-        var insertionTime = CMTime.zero
-        for segment in selected {
-            let asset = AVURLAsset(url: segment.url)
-            let duration = try await asset.load(.duration)
-            let vTracks = try await asset.loadTracks(withMediaType: .video)
-            if let src = vTracks.first {
-                try videoTrack.insertTimeRange(
-                    CMTimeRange(start: .zero, duration: duration),
-                    of: src,
-                    at: insertionTime
-                )
-            }
-            let aTracks = try await asset.loadTracks(withMediaType: .audio)
-            if let src = aTracks.first, let audioTrack {
-                try audioTrack.insertTimeRange(
-                    CMTimeRange(start: .zero, duration: duration),
-                    of: src,
-                    at: insertionTime
-                )
-            }
-            insertionTime = CMTimeAdd(insertionTime, duration)
+        for track in try await screenAsset.load(.tracks) {
+            try await insert(track, sourceStart: .zero, at: .zero, limit: clipRange, into: composition)
         }
 
-        guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
+        if let microphone {
+            let windowEnd = CMTimeAdd(windowStart, clipDuration)
+            let micSegments = microphone.segments.filter {
+                CMTimeCompare($0.endTime, windowStart) > 0 && CMTimeCompare($0.startTime, windowEnd) < 0
+            }
+            if let firstMicSegment = micSegments.first {
+                let micURL = try stitch(initializationSegment: microphone.initializationSegmentURL, segments: micSegments)
+                scratchFiles.append(micURL)
+                let micAsset = AVURLAsset(url: micURL)
+                for track in try await micAsset.loadTracks(withMediaType: .audio) {
+                    // Each stitched file's timeline starts at 0, so align the mic using capture timestamps.
+                    let micStart = CMTimeAdd(firstMicSegment.startTime, try await editListOffset(of: track))
+                    let offset = CMTimeSubtract(micStart, videoStart)
+                    let sourceStart = offset < .zero ? CMTimeMultiply(offset, multiplier: -1) : .zero
+                    let insertAt = offset > .zero ? offset : .zero
+                    try await insert(track, sourceStart: sourceStart, at: insertAt, limit: clipRange, into: composition)
+                }
+            }
+        }
+
+        let preset = format == .hevc ? AVAssetExportPresetPassthrough : AVAssetExportPresetHighestQuality
+        guard let session = AVAssetExportSession(asset: composition, presetName: preset) else {
             throw RollingBufferError.writerFailed("Could not create export session.")
         }
+        try? FileManager.default.removeItem(at: outputURL)
         try await session.export(to: outputURL, as: .mp4)
+    }
+
+    /// Newest segments whose combined length reaches `durationSeconds`, oldest first.
+    private static func latestSegments(in segments: [SegmentMetadata], covering durationSeconds: Double) -> [SegmentMetadata] {
+        let sorted = segments.sorted { CMTimeCompare($0.startTime, $1.startTime) < 0 }
+        var selected: [SegmentMetadata] = []
+        var total = 0.0
+        for segment in sorted.reversed() where total < durationSeconds {
+            selected.insert(segment, at: 0)
+            total += CMTimeGetSeconds(CMTimeSubtract(segment.endTime, segment.startTime))
+        }
+        return selected
+    }
+
+    /// Segment reports include AAC encoder priming (~44ms) that the file's edit list skips,
+    /// so the first audible sample sits this far after the reported segment start.
+    private static func editListOffset(of track: AVAssetTrack) async throws -> CMTime {
+        let segments = try await track.load(.segments)
+        return segments.first { !$0.isEmpty }?.timeMapping.source.start ?? .zero
+    }
+
+    private static func stitch(initializationSegment: URL, segments: [SegmentMetadata]) throws -> URL {
+        let url = try RollingSegmentsDirectory.newExportScratchURL()
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.write(contentsOf: Data(contentsOf: initializationSegment))
+        for segment in segments {
+            try handle.write(contentsOf: Data(contentsOf: segment.url))
+        }
+        return url
+    }
+
+    private static func insert(
+        _ track: AVAssetTrack,
+        sourceStart: CMTime,
+        at insertAt: CMTime,
+        limit clipRange: CMTimeRange,
+        into composition: AVMutableComposition
+    ) async throws {
+        let sourceRange = try await track.load(.timeRange)
+        let start = CMTimeAdd(sourceRange.start, sourceStart)
+        let available = CMTimeSubtract(CMTimeRangeGetEnd(sourceRange), start)
+        let remaining = CMTimeSubtract(CMTimeRangeGetEnd(clipRange), insertAt)
+        let duration = CMTimeMinimum(available, remaining)
+        guard duration > .zero,
+              let compositionTrack = composition.addMutableTrack(
+                  withMediaType: track.mediaType,
+                  preferredTrackID: kCMPersistentTrackID_Invalid
+              )
+        else { return }
+        try compositionTrack.insertTimeRange(
+            CMTimeRange(start: start, duration: duration),
+            of: track,
+            at: insertAt
+        )
     }
 }

@@ -9,7 +9,7 @@ import CoreMedia
 import Foundation
 import ScreenCaptureKit
 
-final class ClipCaptureOutput: NSObject, SCStreamOutput {
+nonisolated final class ClipCaptureOutput: NSObject, SCStreamOutput {
     private weak var recorder: RollingBufferRecorder?
     init(recorder: RollingBufferRecorder) {
         self.recorder = recorder

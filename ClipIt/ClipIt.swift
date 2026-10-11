@@ -27,7 +27,7 @@ struct ClipIt: View {
             .animation(.easeInOut(duration: 0.15), value: currentTab)
         }
         .padding()
-        .frame(width: 450, height: 200)
+        .frame(minWidth: 500)
         .task {
             requestNotificationPermission()
         }

@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum RollingBufferError: LocalizedError {
+nonisolated enum RollingBufferError: LocalizedError {
     case noSegments
     case saveInProgress
     case sampleCopyFailed

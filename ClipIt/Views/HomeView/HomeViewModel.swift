@@ -10,11 +10,28 @@ import SwiftUI
 
 @Observable
 final class HomeViewModel {
+    /// Shared by the main window and the menu bar so toggles stay in sync.
+    static let shared = HomeViewModel()
+
     @ObservationIgnored @AppStorage("user") private var userData: Data?
 
-    var userSettings = Settings()
+    var userSettings = Settings() {
+        didSet {
+            guard !isLoadingSettings, userSettings != oldValue else { return }
+            saveChanges()
+            if userSettings.captureOptions != oldValue.captureOptions {
+                Task { await applyCaptureOptionsChange() }
+            }
+        }
+    }
     var alertItem: AlertItem?
     var microphoneAlert: TwoButtonAlertItem?
+
+    @ObservationIgnored private var isLoadingSettings = false
+
+    private init() {
+        retrieveUser()
+    }
 
     //  MARK: Get and Save user
 
@@ -32,6 +49,8 @@ final class HomeViewModel {
             return
         }
 
+        isLoadingSettings = true
+        defer { isLoadingSettings = false }
         do {
             userSettings = try JSONDecoder().decode(
                 Settings.self,
@@ -77,7 +96,7 @@ final class HomeViewModel {
         if enabled {
             do {
                 try await RecordingCoordinator.shared.startCapture(
-                    includeMicrophone: true
+                    options: userSettings.captureOptions
                 )
                 userSettings.isRecording = true
             } catch {
@@ -111,12 +130,26 @@ final class HomeViewModel {
 
     @MainActor
     func continueRecordingWithoutMicrophone() async {
+        var options = userSettings.captureOptions
+        options.includeMicrophone = false
         do {
-            try await RecordingCoordinator.shared.startCapture(
-                includeMicrophone: false
-            )
+            try await RecordingCoordinator.shared.startCapture(options: options)
             userSettings.isRecording = true
         } catch {
+            alertItem = AlertContext.captureError(error)
+        }
+    }
+
+    /// Resolution, frame rate and microphone are fixed per session, so a live recording restarts with the new options.
+    @MainActor
+    private func applyCaptureOptionsChange() async {
+        guard RecordingCoordinator.shared.isRecording else { return }
+        do {
+            try await RecordingCoordinator.shared.restartCapture(
+                options: userSettings.captureOptions
+            )
+        } catch {
+            userSettings.isRecording = RecordingCoordinator.shared.isRecording
             alertItem = AlertContext.captureError(error)
         }
     }
@@ -126,12 +159,9 @@ final class HomeViewModel {
     @MainActor
     func exportCurrentRollingClip() async {
         guard userSettings.isRecording else { return }
-        let seconds = userSettings.clipDurationSeconds
         do {
-            let url = try await RecordingCoordinator.shared.exportRollingClip(
-                durationSeconds: seconds,
-                saveLocation: userSettings.saveLocation,
-                bookmarkData: userSettings.saveLocationBookmarkData
+            let url = try await exportRollingClip(
+                durationSeconds: userSettings.clipDurationSeconds
             )
             print("Saved clip to \(url.path)")
             scheduleNotification(
@@ -142,5 +172,15 @@ final class HomeViewModel {
         } catch {
             alertItem = AlertContext.captureError(error)
         }
+    }
+
+    @MainActor
+    func exportRollingClip(durationSeconds: Double) async throws -> URL {
+        try await RecordingCoordinator.shared.exportRollingClip(
+            durationSeconds: durationSeconds,
+            format: userSettings.exportFormat,
+            saveLocation: userSettings.saveLocation,
+            bookmarkData: userSettings.saveLocationBookmarkData
+        )
     }
 }

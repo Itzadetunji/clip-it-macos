@@ -9,6 +9,8 @@ import AppKit
 import SwiftUI
 
 struct ClipItMenuBarExtra: Scene {
+    @State private var viewModel = HomeViewModel.shared
+
     var body: some Scene {
         MenuBarExtra("Clip It", image: "MenuBarIcon")
         {
@@ -33,6 +35,11 @@ struct ClipItMenuBarExtra: Scene {
                 }
             }
 
+            Toggle(
+                "Record Microphone",
+                isOn: $viewModel.userSettings.recordMicrophone
+            )
+
             Divider()
 
             Button("Stop Recording") {
@@ -56,6 +63,7 @@ struct ClipItMenuBarExtra: Scene {
         Task { @MainActor in
             do {
                 try await RecordingCoordinator.shared.stopCapture()
+                viewModel.userSettings.isRecording = false
             } catch {
                 scheduleNotification(
                     title: "Stop Recording Failed",
@@ -73,13 +81,9 @@ struct ClipItMenuBarExtra: Scene {
             }
 
             do {
-                let settings = loadSettings()
-                let url = try await RecordingCoordinator.shared
-                    .exportRollingClip(
-                        durationSeconds: duration,
-                        saveLocation: settings.saveLocation,
-                        bookmarkData: settings.saveLocationBookmarkData
-                    )
+                let url = try await viewModel.exportRollingClip(
+                    durationSeconds: duration
+                )
 
                 print("Saved Clip to \(url.path)")
 
@@ -94,16 +98,5 @@ struct ClipItMenuBarExtra: Scene {
                 )
             }
         }
-    }
-
-    private func loadSettings() -> Settings {
-        guard
-            let data = UserDefaults.standard.data(forKey: "user"),
-            let settings = try? JSONDecoder().decode(Settings.self, from: data)
-        else {
-            return Settings()
-        }
-
-        return settings
     }
 }

@@ -24,7 +24,7 @@ final class ScreenCaptureEngine {
         self.output = ClipCaptureOutput(recorder: rollingBufferRecorder)
     }
 
-    func start() async throws {
+    func start(options: CaptureOptions) async throws {
         guard stream == nil else {
             throw ScreenCaptureEngineError.alreadyRunning
         }
@@ -48,13 +48,21 @@ final class ScreenCaptureEngine {
             ?? NSScreen.screens.first?.backingScaleFactor
             ?? 2.0
         let frame = display.frame
-        let pixelWidth = max(1, Int((frame.width * scale).rounded()))
-        let pixelHeight = max(1, Int((frame.height * scale).rounded()))
+        let nativeWidth = max(1, Int((frame.width * scale).rounded()))
+        let nativeHeight = max(1, Int((frame.height * scale).rounded()))
+        let outputSize = Self.outputSize(
+            nativeWidth: nativeWidth,
+            nativeHeight: nativeHeight,
+            maxHeight: options.resolution.maxHeight
+        )
 
         let configuration = SCStreamConfiguration()
-        configuration.width = pixelWidth
-        configuration.height = pixelHeight
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 60)
+        configuration.width = outputSize.width
+        configuration.height = outputSize.height
+        configuration.minimumFrameInterval = CMTime(
+            value: 1,
+            timescale: CMTimeScale(options.frameRate.rawValue)
+        )
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.showsCursor = true
         configuration.capturesAudio = true
@@ -86,5 +94,18 @@ final class ScreenCaptureEngine {
             print(error)
         }
         self.stream = nil
+    }
+
+    /// Video encoders need even dimensions.
+    private static func outputSize(nativeWidth: Int, nativeHeight: Int, maxHeight: Int?) -> (width: Int, height: Int) {
+        guard let maxHeight, nativeHeight > maxHeight else {
+            return (evenDimension(nativeWidth), evenDimension(nativeHeight))
+        }
+        let scaledWidth = Double(nativeWidth) * Double(maxHeight) / Double(nativeHeight)
+        return (evenDimension(Int(scaledWidth.rounded())), evenDimension(maxHeight))
+    }
+
+    private static func evenDimension(_ value: Int) -> Int {
+        max(2, value - value % 2)
     }
 }
