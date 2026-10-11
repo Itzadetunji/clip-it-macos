@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import KeyboardShortcuts
 import SwiftUI
 
 struct ClipItMenuBarExtra: Scene {
@@ -19,6 +20,23 @@ struct ClipItMenuBarExtra: Scene {
             } label: {
                 Label("Open ClipIt", systemImage: "macwindow")
             }
+
+            Divider()
+
+            if viewModel.userSettings.isRecording {
+                Button("Stop Recording") {
+                    stopRecording()
+                }
+            } else {
+                Button("Start Recording") {
+                    startRecording()
+                }
+            }
+
+            Button(saveCurrentTitle) {
+                saveClip(duration: viewModel.userSettings.clipDurationSeconds)
+            }
+            .disabled(!viewModel.userSettings.isRecording)
 
             Menu("Save Clip") {
 
@@ -34,6 +52,7 @@ struct ClipItMenuBarExtra: Scene {
                     saveClip(duration: 60)
                 }
             }
+            .disabled(!viewModel.userSettings.isRecording)
 
             Toggle(
                 "Record Microphone",
@@ -41,10 +60,6 @@ struct ClipItMenuBarExtra: Scene {
             )
 
             Divider()
-
-            Button("Stop Recording") {
-                stopRecording()
-            }
 
             Button {
                 NSApplication.shared.terminate(nil)
@@ -54,9 +69,27 @@ struct ClipItMenuBarExtra: Scene {
         }
     }
 
+    private var saveCurrentTitle: String {
+        let seconds = Int(viewModel.userSettings.clipDurationSeconds)
+        guard let shortcut = KeyboardShortcuts.getShortcut(for: .saveClip) else {
+            return "Clip It (\(seconds)s)"
+        }
+        return "Clip It (\(seconds)s)   \(shortcut.description)"
+    }
+
     private func openMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.windows.forEach { $0.makeKeyAndOrderFront(nil) }
+    }
+
+    private func startRecording() {
+        Task { @MainActor in
+            await viewModel.setRecording(true)
+            // Start errors are shown as alerts in the main window.
+            if !viewModel.userSettings.isRecording {
+                openMainWindow()
+            }
+        }
     }
 
     private func stopRecording() {
@@ -74,29 +107,8 @@ struct ClipItMenuBarExtra: Scene {
     }
 
     private func saveClip(duration: Double) {
-        Task {
-            @MainActor in
-            guard RecordingCoordinator.shared.isRecording else {
-                return
-            }
-
-            do {
-                let url = try await viewModel.exportRollingClip(
-                    durationSeconds: duration
-                )
-
-                print("Saved Clip to \(url.path)")
-
-                scheduleNotification(
-                    title: "Clip Saved",
-                    body: "Your clip has been saved successfully"
-                )
-            } catch {
-                scheduleNotification(
-                    title: "Clip Save Failed",
-                    body: error.localizedDescription
-                )
-            }
+        Task { @MainActor in
+            await viewModel.saveClip(durationSeconds: duration, showsErrorAlert: false)
         }
     }
 }

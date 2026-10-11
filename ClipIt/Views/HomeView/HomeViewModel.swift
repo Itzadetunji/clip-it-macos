@@ -157,30 +157,39 @@ final class HomeViewModel {
     // MARK: - Clip export
 
     @MainActor
-    func exportCurrentRollingClip() async {
-        guard userSettings.isRecording else { return }
+    func exportCurrentRollingClip(showsErrorAlert: Bool = true) async {
+        await saveClip(
+            durationSeconds: userSettings.clipDurationSeconds,
+            showsErrorAlert: showsErrorAlert
+        )
+    }
+
+    /// Shared by the window, menu bar and keyboard shortcut. Errors become an alert in the window,
+    /// or a notification when the window may be hidden.
+    @MainActor
+    func saveClip(durationSeconds: Double, showsErrorAlert: Bool) async {
+        guard RecordingCoordinator.shared.isRecording else { return }
         do {
-            let url = try await exportRollingClip(
-                durationSeconds: userSettings.clipDurationSeconds
+            let url = try await RecordingCoordinator.shared.exportRollingClip(
+                durationSeconds: durationSeconds,
+                format: userSettings.exportFormat,
+                saveLocation: userSettings.saveLocation,
+                bookmarkData: userSettings.saveLocationBookmarkData
             )
             print("Saved clip to \(url.path)")
             scheduleNotification(
                 title: "Clip Saved",
-                body: "Your clip has been saved successfully"
+                body: "\(url.lastPathComponent) was saved to \(url.deletingLastPathComponent().lastPathComponent)."
             )
-            // Optional: alertItem = … success
         } catch {
-            alertItem = AlertContext.captureError(error)
+            if showsErrorAlert {
+                alertItem = AlertContext.captureError(error)
+            } else {
+                scheduleNotification(
+                    title: "Clip Save Failed",
+                    body: error.localizedDescription
+                )
+            }
         }
-    }
-
-    @MainActor
-    func exportRollingClip(durationSeconds: Double) async throws -> URL {
-        try await RecordingCoordinator.shared.exportRollingClip(
-            durationSeconds: durationSeconds,
-            format: userSettings.exportFormat,
-            saveLocation: userSettings.saveLocation,
-            bookmarkData: userSettings.saveLocationBookmarkData
-        )
     }
 }

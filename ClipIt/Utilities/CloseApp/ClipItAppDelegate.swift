@@ -7,34 +7,28 @@
 
 import AppKit
 import KeyboardShortcuts
+import UserNotifications
 
-final class ClipItAppDelegate: NSObject, NSApplicationDelegate {
+final class ClipItAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = self
+
         KeyboardShortcuts.onKeyUp(for: .saveClip) {
             Task { @MainActor in
-                guard RecordingCoordinator.shared.isRecording else { return }
-                do {
-                    let viewModel = HomeViewModel.shared
-                    let url = try await viewModel.exportRollingClip(
-                        durationSeconds: viewModel.userSettings.clipDurationSeconds
-                    )
-                    print("Saved clip to \(url.path)")
-                    scheduleNotification(
-                        title: "Clip Saved",
-                        body: "Your clip has been saved successfully"
-                    )
-                } catch {
-                    scheduleNotification(
-                        title: "Clip Save Failed",
-                        body: error.localizedDescription
-                    )
-                }
+                await HomeViewModel.shared.exportCurrentRollingClip(showsErrorAlert: false)
             }
         }
     }
 
-
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    /// macOS hides banners for the frontmost app unless the delegate opts in, which swallowed "Clip Saved" when saving from the window.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound, .list]
     }
 }

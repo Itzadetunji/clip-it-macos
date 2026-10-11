@@ -5,6 +5,7 @@
 //  Created by Adetunji Adeyinka on 11/05/2026.
 //
 
+import KeyboardShortcuts
 import SwiftUI
 
 struct HomeView: View {
@@ -41,6 +42,15 @@ struct HomeView: View {
                     .easeInOut(duration: 0.15),
                     value: viewModel.userSettings.isRecording
                 )
+            }
+
+            preferenceRow(label: "Clip It Shortcut", alignment: .top) {
+                VStack(alignment: .leading) {
+                    KeyboardShortcuts.Recorder(for: .saveClip)
+                    Text("Press it anywhere to save the last \(Int(viewModel.userSettings.clipDurationSeconds))s")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             //            preferenceRow(label: "Startup") {
