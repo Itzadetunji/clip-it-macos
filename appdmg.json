@@ -1,16 +1,16 @@
 {
   "title": "ClipIt",
   "icon": "/Users/adetunjiadeyinka/Documents/Coding Projects/ios/ClipIt/macOS/Builds/VolumeIcon.icns",
-  "background-color": "#2A2A2A",
+  "background": "/Users/adetunjiadeyinka/Documents/Coding Projects/ios/ClipIt/macOS/DMG/background.tiff",
   "icon-size": 80,
   "window": {
     "size": {
-      "width": 600,
-      "height": 400
+      "width": 540,
+      "height": 380
     }
   },
   "contents": [
-    { "x": 448, "y": 200, "type": "link", "path": "/Applications" },
-    { "x": 152, "y": 200, "type": "file", "path": "/Users/adetunjiadeyinka/Documents/Coding Projects/ios/ClipIt/macOS/Builds/ClipIt.app" }
+    { "x": 410, "y": 220, "type": "link", "path": "/Applications" },
+    { "x": 130, "y": 220, "type": "file", "path": "/Users/adetunjiadeyinka/Documents/Coding Projects/ios/ClipIt/macOS/Builds/ClipIt.app" }
   ]
 }
